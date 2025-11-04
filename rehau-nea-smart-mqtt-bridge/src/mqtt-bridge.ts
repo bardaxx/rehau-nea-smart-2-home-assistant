@@ -15,6 +15,8 @@ class RehauMQTTBridge {
   private messageHandlers: MessageHandler[] = [];
   private referentials: ReferentialsMap | null = null;
   private referentialsTimer: NodeJS.Timeout | null = null;
+  private rehauSubscriptions: Set<string> = new Set();
+  private haSubscriptions: Set<string> = new Set();
 
   constructor(rehauAuth: RehauAuthPersistent, mqttConfig: MQTTConfig) {
     this.rehauAuth = rehauAuth;
@@ -84,10 +86,27 @@ class RehauMQTTBridge {
         this.rehauClient!.subscribe(userTopic, (err) => {
           if (!err) {
             logger.info(`Subscribed to REHAU user topic: ${userTopic}`);
+            this.rehauSubscriptions.add(userTopic);
           } else {
             logger.error('Failed to subscribe to REHAU user topic:', err);
           }
         });
+        
+        // Re-subscribe to all previously subscribed topics (for reconnection)
+        if (this.rehauSubscriptions.size > 1) {
+          logger.info(`Re-subscribing to ${this.rehauSubscriptions.size - 1} REHAU topics...`);
+          this.rehauSubscriptions.forEach(topic => {
+            if (topic !== userTopic) {
+              this.rehauClient!.subscribe(topic, (err) => {
+                if (!err) {
+                  logger.debug(`Re-subscribed to REHAU topic: ${topic}`);
+                } else {
+                  logger.error(`Failed to re-subscribe to ${topic}:`, err);
+                }
+              });
+            }
+          });
+        }
         
         resolve();
       });
@@ -139,6 +158,21 @@ class RehauMQTTBridge {
 
       this.haClient.on('connect', () => {
         logger.info('Connected to Home Assistant MQTT broker');
+        
+        // Re-subscribe to all previously subscribed topics (for reconnection)
+        if (this.haSubscriptions.size > 0) {
+          logger.info(`Re-subscribing to ${this.haSubscriptions.size} Home Assistant topics...`);
+          this.haSubscriptions.forEach(topic => {
+            this.haClient!.subscribe(topic, (err) => {
+              if (!err) {
+                logger.debug(`Re-subscribed to HA topic: ${topic}`);
+              } else {
+                logger.error(`Failed to re-subscribe to ${topic}:`, err);
+              }
+            });
+          });
+        }
+        
         resolve();
       });
 
@@ -168,6 +202,7 @@ class RehauMQTTBridge {
       this.rehauClient!.subscribe(topic, (err) => {
         if (!err) {
           logger.info(`Subscribed to installation: ${topic}`);
+          this.rehauSubscriptions.add(topic);
           resolve();
         } else {
           logger.error(`Failed to subscribe to ${topic}:`, err);
@@ -259,6 +294,7 @@ class RehauMQTTBridge {
     this.haClient.subscribe(topic, (err) => {
       if (!err) {
         logger.debug(`Subscribed to HA topic: ${topic}`);
+        this.haSubscriptions.add(topic);
       } else {
         logger.error(`Failed to subscribe to ${topic}:`, err);
       }

@@ -177,10 +177,32 @@ Look for:
 - Verify MQTT credentials in add-on configuration
 - Restart the add-on
 
+## Developer Tools
+
+This project includes standalone parsers for REHAU API responses:
+
+```bash
+# Parse user data from JSON file
+npm run parseUserData -- user-data.json
+npm run parseUserData -- user-data.json --summary
+
+# Parse installation data from JSON file
+npm run parseInstallationData -- installation-data.json
+npm run parseInstallationData -- installation-data.json --summary
+```
+
+These tools are useful for:
+- Debugging API responses from users
+- Analyzing installation configurations
+- Testing parser logic independently
+
+See [Parser Documentation](rehau-nea-smart-mqtt-bridge/src/parsers/README.md) for details.
+
 ## Documentation
 
 For detailed information:
 - **[Complete Add-on Documentation](rehau-nea-smart-mqtt-bridge/README.md)** - Full configuration, debugging guide, and advanced features
+- **[Parser Documentation](rehau-nea-smart-mqtt-bridge/src/parsers/README.md)** - API response parser tools and CLI usage
 - **[CHANGELOG](rehau-nea-smart-mqtt-bridge/CHANGELOG.md)** - Version history and release notes
 
 ## Support

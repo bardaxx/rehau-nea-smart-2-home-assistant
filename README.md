@@ -47,14 +47,24 @@ Home Assistant add-on for REHAU NEA SMART 2.0 heating system integration via MQT
 
 ## Features
 
-- **Climate control entities** for each heating zone
+### Climate Control
+- **Climate entities** for each heating zone with full thermostat control
 - **Separate temperature and humidity sensors** per zone
 - **Outside temperature sensor**
-- **Installation-wide mode control** (heat/cool)
+- **Installation-wide mode control** (heat/cool switching)
 - **Optimistic mode** for instant UI feedback
+
+### LIVE Data Monitoring (v2.1.0+)
+- **Mixed Circuit sensors** - Setpoint, supply, return temperatures, valve opening, pump state
+- **Digital I/O sensors** - DI0-DI4, DO0-DO5 for advanced monitoring
+- **Periodic polling** - Auto-refresh every 5 minutes (configurable)
+- **Diagnostic entities** - Hidden by default, visible in device diagnostics
+
+### System Features
 - **Real-time MQTT updates** from REHAU system
-- **Configurable update intervals**
+- **Configurable update intervals** for zones, tokens, and referentials
 - **Automatic token refresh** with fallback to fresh login
+- **Enhanced debug logging** with sensitive data redaction
 - **TypeScript implementation** with strict type safety
 
 ## What You'll Get in Home Assistant
@@ -69,6 +79,7 @@ After starting the add-on, you'll see:
 - **Humidity sensors**: One per zone (e.g., `sensor.rehau_<room>_humidity`)
 - **Outside temperature sensor**: `sensor.rehau_<installation>_outside_temp`
 - **Mode control**: `climate.rehau_<installation>_mode_control` for heat/cool switching
+- **LIVE sensors** (diagnostic): Mixed circuits, pumps, digital I/O - visible in device diagnostics page
 
 ## Troubleshooting
 
@@ -87,7 +98,19 @@ After starting the add-on, you'll see:
 - Verify MQTT credentials in add-on configuration
 - Restart the add-on
 
+## Documentation
+
+For detailed information:
+- **Add-on README**: [`rehau-nea-smart-mqtt-bridge/README.md`](rehau-nea-smart-mqtt-bridge/README.md) - Full configuration and debugging guide
+- **CHANGELOG**: [`rehau-nea-smart-mqtt-bridge/CHANGELOG.md`](rehau-nea-smart-mqtt-bridge/CHANGELOG.md) - Version history and changes
+
 ## Support
 
 For issues and feature requests, please visit:
 https://github.com/manuxio/rehau-nea-smart-2-home-assistant/issues
+
+**Before opening an issue:**
+1. Enable debug mode (`log_level: "debug"`) and review logs
+2. Check existing issues for similar problems
+3. Include add-on version, Home Assistant version, and relevant log excerpts
+4. See the debugging guide in the add-on README

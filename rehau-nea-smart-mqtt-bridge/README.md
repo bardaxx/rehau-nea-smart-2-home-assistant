@@ -2,6 +2,44 @@
 
 TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems.
 
+## ⚠️ BREAKING CHANGES
+
+**Version 2.0+ introduces new entity IDs for better consistency and future compatibility.**
+
+### Why the Change?
+
+Previous versions used inconsistent entity ID patterns that could cause conflicts when multiple zones had the same name in different groups. The new structure ensures:
+- **Unique entity IDs** across all zones
+- **Hierarchical naming** that includes installation, group, and zone
+- **Future-proof structure** for additional features
+- **Consistent naming** across all entity types
+
+### Migration Required
+
+After upgrading to v2.0+, your entity IDs will change. You will need to:
+
+1. **Update automations** that reference old entity IDs
+2. **Update dashboards** with new entity names
+3. **Update scripts** that control REHAU entities
+4. **Reconfigure integrations** that use REHAU entities
+
+### Entity ID Changes
+
+| Old Pattern | New Pattern |
+|-------------|-------------|
+| `climate.rehau_myinstall_myinstall_zone` | `climate.rehau_myinstall_groupname_zonename` |
+| `sensor.rehau_myinstall_zone_temperature` | `sensor.rehau_groupname_zonename_temperature` |
+| `sensor.rehau_myinstall_zone_humidity` | `sensor.rehau_groupname_zonename_humidity` |
+
+**Note:** Group names are now always included in entity IDs for consistency, even if you have only one group.
+
+### Display Names
+
+The `USE_GROUP_IN_NAMES` environment variable controls display names (friendly names), not entity IDs:
+- **When `true`**: Display names include group (e.g., "Atilio Salone")
+- **When `false`**: Display names show only zone (e.g., "Salone")
+- **Entity IDs**: Always include group name regardless of this setting
+
 ## About
 
 This add-on connects your REHAU NEA SMART 2.0 heating system to Home Assistant via MQTT, creating climate entities for each zone with full control capabilities.
@@ -36,10 +74,83 @@ Before installing this add-on, you must have:
 - **Separate temperature and humidity sensors** per zone
 - **Outside temperature sensor**
 - **Installation-wide mode control**
+- **Ring light control** for each thermostat
+- **Lock control** to disable manual adjustments
 - **Real-time MQTT updates** from REHAU system
 - **Configurable update intervals**
 - **Optimistic mode** for instant UI feedback
 - **Automatic token refresh**
+
+## Entity Types
+
+This add-on creates multiple entity types in Home Assistant for comprehensive control of your REHAU system.
+
+### Complete Entity List
+
+| Entity Type | Entity ID Pattern | Display Name Pattern | Description | Controllable |
+|-------------|-------------------|----------------------|-------------|--------------|
+| **Climate** | `climate.rehau_<install>_<group>_<zone>` | `<Group> <Zone>` or `<Zone>` | Main climate control with mode, preset, and temperature | ✅ Yes |
+| **Temperature Sensor** | `sensor.rehau_<group>_<zone>_temperature` | `<Group> - <Zone> Temperature` or `<Zone> Temperature` | Current zone temperature in °C | ❌ No |
+| **Humidity Sensor** | `sensor.rehau_<group>_<zone>_humidity` | `<Group> - <Zone> Humidity` or `<Zone> Humidity` | Current zone humidity in % | ❌ No |
+| **Ring Light** | `light.rehau_<group>_<zone>_ring_light` | `<Group> - <Zone> Ring Light` or `<Zone> Ring Light` | Thermostat ring light control | ✅ Yes |
+| **Lock Switch** | `switch.rehau_<group>_<zone>_lock` | `<Group> - <Zone> Lock` or `<Zone> Lock` | Lock/unlock manual thermostat control | ✅ Yes |
+| **Outside Temperature** | `sensor.rehau_<installid>_outside_temp` | `Outside Temperature` | Installation outside temperature | ❌ No |
+| **Mode Control** | `climate.rehau_<installid>_mode_control` | `Mode Control` | Installation-wide heating/cooling mode | ✅ Yes |
+
+### Entity ID Examples
+
+**With `USE_GROUP_IN_NAMES=false` (Default):**
+```
+climate.rehau_cappelleri_atilio_salone
+sensor.rehau_atilio_salone_temperature
+sensor.rehau_atilio_salone_humidity
+light.rehau_atilio_salone_ring_light
+switch.rehau_atilio_salone_lock
+```
+**Display Names:** "Salone", "Salone Temperature", "Salone Humidity", etc.
+
+**With `USE_GROUP_IN_NAMES=true`:**
+```
+climate.rehau_cappelleri_atilio_salone
+sensor.rehau_atilio_salone_temperature
+sensor.rehau_atilio_salone_humidity
+light.rehau_atilio_salone_ring_light
+switch.rehau_atilio_salone_lock
+```
+**Display Names:** "Atilio Salone", "Atilio - Salone Temperature", "Atilio - Salone Humidity", etc.
+
+### Climate Entity Controls
+
+The climate entity provides:
+- **Modes**: `off`, `heat`, `cool` (depending on system configuration)
+- **Presets**: `comfort`, `away`
+- **Temperature**: Adjustable setpoint (5-30°C)
+- **Current Temperature**: Real-time zone temperature
+- **Current Humidity**: Real-time zone humidity
+
+### Additional Controls
+
+**Ring Light Switch:**
+- Controls the LED ring on the physical thermostat
+- Useful for visual indicators or night mode
+- Updates in real-time
+
+**Lock Switch:**
+- Locks/unlocks manual control on the physical thermostat
+- When locked (ON): Users cannot change settings on the device
+- When unlocked (OFF): Users can adjust settings normally
+- Useful for preventing unauthorized changes
+
+### Naming Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `<install>` | Installation name (sanitized) | `cappelleri` |
+| `<group>` | Group name (sanitized) | `atilio` |
+| `<zone>` | Zone name (sanitized) | `salone` |
+| `<installid>` | Installation unique ID | `78602d11303856504e3225ee27165454` |
+
+**Note:** Sanitized names are lowercase with spaces replaced by underscores.
 
 ## Configuration
 
@@ -54,6 +165,7 @@ log_level: "info"
 zone_reload_interval: 300
 token_refresh_interval: 21600
 referentials_reload_interval: 86400
+use_group_in_names: false
 ```
 
 ## Options
@@ -73,6 +185,10 @@ referentials_reload_interval: 86400
 - `zone_reload_interval`: How often to reload zone data in seconds - default: 300 (5 minutes)
 - `token_refresh_interval`: How often to refresh authentication token in seconds - default: 21600 (6 hours)
 - `referentials_reload_interval`: How often to reload referentials in seconds - default: 86400 (24 hours)
+- `use_group_in_names`: Include group names in entity display names - default: false
+  - `false`: Display names show only zone (e.g., "Salone")
+  - `true`: Display names include group (e.g., "Atilio Salone")
+  - **Note**: Entity IDs always include group names regardless of this setting
 
 ## Where to Find Your Entities
 

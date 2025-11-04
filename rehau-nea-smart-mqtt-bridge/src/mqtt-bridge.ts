@@ -217,8 +217,14 @@ class RehauMQTTBridge {
       const payload: RehauMQTTMessage = JSON.parse(message.toString());
       logger.debug('REHAU message received:', { topic, type: payload.type });
       
-      // Full message dump in debug mode (with redacted sensitive data)
-      debugDump(`REHAU MQTT Message [${topic}]`, payload);
+      // Check for LIVE data responses
+      if (payload.type === 'LIVE_EMU' || payload.type === 'LIVE_DIDO') {
+        logger.info(`Received ${payload.type} data`);
+        debugDump(`${payload.type} Response`, payload, true);
+      } else {
+        // Full message dump in debug mode (with redacted sensitive data)
+        debugDump(`REHAU MQTT Message [${topic}]`, payload);
+      }
       
       // Notify all registered handlers
       this.messageHandlers.forEach(handler => {
@@ -339,6 +345,25 @@ class RehauMQTTBridge {
     return this.connected && 
            !!this.rehauClient?.connected && 
            !!this.haClient?.connected;
+  }
+
+  /**
+   * Request live data from REHAU system
+   * @param installUnique - Installation unique ID
+   * @param dataType - 0 for LIVE_DIDO (digital I/O), 1 for LIVE_EMU (mixed circuits/pumps)
+   */
+  requestLiveData(installUnique: string, dataType: 0 | 1): void {
+    const topic = `client/${installUnique}`;
+    const message = {
+      "11": "REQ_LIVE",
+      "12": {
+        "DATA": dataType
+      }
+    };
+    
+    const typeName = dataType === 0 ? 'LIVE_DIDO' : 'LIVE_EMU';
+    logger.info(`Requesting ${typeName} data for installation ${installUnique}`);
+    this.publishToRehau(topic, message);
   }
 
   async disconnect(): Promise<void> {

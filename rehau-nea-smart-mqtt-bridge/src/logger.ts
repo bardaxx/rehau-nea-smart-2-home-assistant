@@ -89,12 +89,22 @@ function safeStringify(obj: any, indent: number = 2): string {
 
 /**
  * Log full message dump in debug mode (with redacted sensitive data)
+ * @param label - Label for the dump
+ * @param data - Data to dump
+ * @param condensed - If true, use single-line format (no indentation)
  */
-export function debugDump(label: string, data: any): void {
+export function debugDump(label: string, data: any, condensed: boolean = false): void {
   if (logLevel === 'debug') {
     try {
       const redacted = redactSensitiveData(data);
-      logger.debug(`[DUMP] ${label}:\n${safeStringify(redacted, 2)}`);
+      const indent = condensed ? 0 : 2;
+      const formatted = safeStringify(redacted, indent);
+      
+      if (condensed) {
+        logger.debug(`[DUMP] ${label}: ${formatted}`);
+      } else {
+        logger.debug(`[DUMP] ${label}:\n${formatted}`);
+      }
     } catch (error) {
       logger.debug(`[DUMP] ${label}: [Unable to serialize data]`);
     }

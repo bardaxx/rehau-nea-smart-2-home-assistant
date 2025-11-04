@@ -261,6 +261,19 @@ async function start() {
     
     logger.info('REHAU NEA SMART 2.0 MQTT Bridge started successfully');
     
+    // Request LIVE data for all installations
+    logger.info('Requesting LIVE data from installations...');
+    for (const install of installs) {
+      // Request LIVE_EMU (mixed circuits, pumps, temperatures)
+      mqttBridge.requestLiveData(install.unique, 1);
+      
+      // Wait a bit before requesting next type
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Request LIVE_DIDO (digital inputs/outputs)
+      mqttBridge.requestLiveData(install.unique, 0);
+    }
+    
     // Start zone reloading with configurable interval
     startPolling();
     

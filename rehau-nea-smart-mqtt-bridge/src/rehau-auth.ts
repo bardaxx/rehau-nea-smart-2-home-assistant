@@ -394,7 +394,8 @@ class RehauAuthPersistent {
       logger.info(`getInstallationData HTTP Response: status=${response.status}`);
       logger.debug('Response headers:', response.headers);
       
-      debugDump('getInstallationData API Response', response.data);
+      // Use condensed format for large installation data
+      debugDump('getInstallationData API Response', response.data, true);
 
       if (response.data && (response.data.success || response.data.data)) {
         const user = response.data.data?.user || response.data.user;

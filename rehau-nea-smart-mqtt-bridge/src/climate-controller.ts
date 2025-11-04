@@ -279,9 +279,9 @@ class ClimateController {
     this.mqttBridge.publishToHomeAssistant(discoveryTopic, config, { retain: true });
     
     // Log the full config for debugging
-    logger.info(`Discovery config for ${zoneName}:`);
-    logger.info(`Topic: ${discoveryTopic}`);
-    logger.info(`Config: ${JSON.stringify(config, null, 2)}`);
+    logger.debug(`Discovery config for ${zoneName}:`);
+    logger.debug(`Topic: ${discoveryTopic}`);
+    logger.debug(`Config: ${JSON.stringify(config, null, 2)}`);
     
     // Publish initial availability
     this.mqttBridge.publishToHomeAssistant(

@@ -1,8 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 import crypto from 'crypto';
 import logger, { debugDump } from './logger';
-import { RehauTokenResponse, RehauInstallation } from './types';
-import { UserDataParser, InstallationDataParser } from './parsers';
+import { RehauTokenResponse } from './types';
+import { UserDataParserV2, InstallationDataParserV2, type IInstall } from './parsers';
 
 interface InstallInfo {
   unique: string;
@@ -251,14 +251,14 @@ class RehauAuthPersistent {
       
       debugDump('getUserData API Response', response.data);
 
-      // Use parser to extract user data
-      const parser = new UserDataParser();
+      // Use V2 parser to extract user data
+      const parser = new UserDataParserV2();
       const parsed = parser.parse(response.data);
       
       this.installs = parsed.installations.map(install => ({
         unique: install.unique,
         name: install.name,
-        _id: install.id
+        _id: install._id
       }));
       
       logger.info(`Found ${this.installs.length} installation(s)`);
@@ -366,7 +366,7 @@ class RehauAuthPersistent {
   /**
    * Get full installation data including zones and controllers
    */
-  async getInstallationData(install: InstallInfo): Promise<RehauInstallation> {
+  async getInstallationData(install: InstallInfo): Promise<IInstall> {
     try {
       const installIds = this.installs.map(i => i._id).join(',');
       const url = `https://api.nea2aws.aws.rehau.cloud/v2/users/${this.email}/getDataofInstall` +
@@ -391,24 +391,22 @@ class RehauAuthPersistent {
       // Use condensed format for large installation data
       debugDump('getInstallationData API Response', response.data, true);
 
-      // Use parser to extract installation data
-      const parser = new InstallationDataParser();
+      // Use V2 parser to extract installation data
+      const parser = new InstallationDataParserV2();
       const parsed = parser.parse(response.data, install.unique);
       
       logger.debug('Parsed installation data:', parser.getSummary(parsed));
 
-      // Find the raw installation from response for backward compatibility
-      if (response.data && (response.data.success || response.data.data)) {
-        const user = response.data.data?.user || response.data.user;
-        if (user && user.installs && user.installs.length > 0) {
-          const fullInstall = user.installs.find((i: RehauInstallation) => i.unique === install.unique);
-          if (fullInstall) {
-            return fullInstall;
-          }
-        }
+      // Get typed installation data (without raw fields)
+      const typedData = parser.getTyped(parsed);
+      
+      // Find the specific installation
+      const installation = typedData.installs.find(i => i.unique === install.unique);
+      if (!installation) {
+        throw new Error(`Installation ${install.unique} not found in parsed data`);
       }
       
-      throw new Error('Failed to get installation data');
+      return installation;
     } catch (error: any) {
       if (error.response) {
         logger.error(`getInstallationData HTTP Error: status=${error.response.status}`);

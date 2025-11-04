@@ -2,22 +2,28 @@ import logger from './logger';
 import RehauMQTTBridge from './mqtt-bridge';
 import RehauAuthPersistent from './rehau-auth';
 import {
-  RehauInstallation,
-  RehauChannel,
   ClimateState,
-  ZoneInfo,
   HACommand,
   RehauMQTTMessage,
   RehauCommandData,
   LiveEMUData,
   LiveDIDOData
 } from './types';
+import type { IInstall, IChannel, IZone, IGroup } from './parsers';
 
-interface ExtendedZoneInfo extends ZoneInfo {
+interface ExtendedZoneInfo {
+  zoneId: string;
+  zoneName: string;
+  zoneNumber: number;
+  channelNumber?: number;
   groupName: string;
   installId: string;
-  channels: RehauChannel[];
+  installName: string;
+  channels: IChannel[];
 }
+
+// Read configuration
+const USE_GROUP_IN_NAMES = process.env.USE_GROUP_IN_NAMES === 'true';
 
 class ClimateController {
   private mqttBridge: RehauMQTTBridge;
@@ -49,28 +55,28 @@ class ClimateController {
     });
   }
 
-  initializeInstallation(install: RehauInstallation): void {
+  initializeInstallation(install: IInstall): void {
     const installId = install.unique;
     const installName = install.name;
     
     // Store installation name for later use
     this.installationNames.set(installId, installName);
     
-    // Get zones from groups (not controllers)
+    // Get zones from groups
     const zones: ExtendedZoneInfo[] = [];
     if (install.groups && install.groups.length > 0) {
-      install.groups.forEach(group => {
+      install.groups.forEach((group: IGroup) => {
         if (group.zones && group.zones.length > 0) {
-          group.zones.forEach(zone => {
+          group.zones.forEach((zone: IZone) => {
             if (zone.channels && zone.channels.length > 0) {
               zones.push({
-                zoneId: zone._id,
+                zoneId: zone.id,
                 zoneName: zone.name,
                 zoneNumber: zone.number,
                 groupName: group.name,
                 installId: installId,
                 installName: install.name,
-                channels: zone.channels // Include full channel data
+                channels: zone.channels
               });
             }
           });
@@ -93,8 +99,8 @@ class ClimateController {
     const isActivelyCooling = zones.some(z => 
       z.channels && z.channels[0] && 
       (z.channels[0].demand ?? 0) > 0 && 
-      z.channels[0].setpoint_c_normal && 
-      !z.channels[0].setpoint_h_normal
+      z.channels[0].setpoints.coolingNormal.celsius !== null && 
+      z.channels[0].setpoints.heatingNormal.celsius === null
     );
     
     if (systemSupportsCooling && isActivelyCooling) {
@@ -117,42 +123,35 @@ class ClimateController {
       if (zone.channels && zone.channels[0]) {
         const channel = zone.channels[0];
         
-        // Current temperature (stored as Fahrenheit * 10)
-        if (channel.temp_zone !== undefined) {
-          const temp = this.convertTemp(channel.temp_zone);
-          if (temp !== null) currentTemp = temp;
+        // Current temperature (already converted to Celsius)
+        if (channel.currentTemperature.celsius !== null) {
+          currentTemp = channel.currentTemperature.celsius;
         }
         
         // Humidity
-        if (channel.humidity !== undefined) {
+        if (channel.humidity !== null) {
           humidity = channel.humidity;
         }
         
-        // Mode and Preset based on mode_used
-        // mode_used: 0=COMFORT, 1=POWER SAVING, 2=OFF, 3=PROGRAM (not used)
-        if (channel.mode_used === 2) {
-          // OFF - zone is off, no preset
+        // Mode and Preset based on mode
+        // mode: 0=COMFORT, 1=REDUCED, 2=STANDBY, 3=OFF
+        if (channel.mode === 3 || channel.mode === 2) {
+          // OFF or STANDBY - zone is off, no preset
           mode = 'off';
-          preset = null; // Don't publish preset when off
+          preset = null;
         } else {
           // Zone is on - use system mode and set preset
           mode = installationMode;
-          if (channel.mode_used === 0) {
+          if (channel.mode === 0) {
             preset = 'comfort'; // COMFORT
-          } else if (channel.mode_used === 1) {
-            preset = 'away'; // POWER SAVING
+          } else if (channel.mode === 1) {
+            preset = 'away'; // REDUCED/POWER SAVING
           }
-          // mode_used 3 (PROGRAM) is ignored - defaults to comfort
         }
         
-        
-        // Get target temperature
-        if (channel.setpoint_h_normal) {
-          const temp1 = this.convertTemp(channel.setpoint_h_normal);
-          if (temp1 !== null) targetTemp = temp1;
-        } else if (channel.setpoint_c_normal) {
-          const temp2 = this.convertTemp(channel.setpoint_c_normal);
-          if (temp2 !== null) targetTemp = temp2;
+        // Get target temperature (already converted to Celsius)
+        if (channel.setpointTemperature.celsius !== null) {
+          targetTemp = channel.setpointTemperature.celsius;
         }
       }
       
@@ -221,9 +220,13 @@ class ClimateController {
     });
   }
 
-  private publishDiscoveryConfig(zone: ZoneInfo, installId: string, systemMode: 'heat' | 'cool'): void {
+  private publishDiscoveryConfig(zone: ExtendedZoneInfo, installId: string, systemMode: 'heat' | 'cool'): void {
     const zoneKey = `${installId}_zone_${zone.zoneNumber}`;
-    const zoneName = zone.zoneName;
+    
+    // Build zone name with optional group prefix
+    const zoneName = USE_GROUP_IN_NAMES 
+      ? `${zone.groupName} - ${zone.zoneName}`
+      : zone.zoneName;
     const installName = zone.installName;
     
     // MQTT Discovery configuration for Home Assistant
@@ -296,7 +299,7 @@ class ClimateController {
     logger.info(`Published discovery config for ${installName} - ${zoneName}`);
   }
 
-  private publishZoneSensors(zone: ZoneInfo, installId: string, installName: string): void {
+  private publishZoneSensors(zone: ExtendedZoneInfo, installId: string, installName: string): void {
     const zoneName = zone.zoneName;
     const zoneNumber = zone.zoneNumber;
     
@@ -371,7 +374,7 @@ class ClimateController {
     );
   }
 
-  private publishOutsideTemperatureSensor(install: RehauInstallation): void {
+  private publishOutsideTemperatureSensor(install: IInstall): void {
     const installId = install.unique;
     const installName = install.name;
     
@@ -406,21 +409,19 @@ class ClimateController {
       { retain: true }
     );
     
-    // Publish initial value
-    if (install.outside_temp !== undefined) {
-      const tempC = this.convertTemp(install.outside_temp);
-      if (tempC !== null) {
-        this.mqttBridge.publishToHomeAssistant(
-          `homeassistant/sensor/rehau_${installId}_outside_temp/state`,
-          tempC.toString(),
-          { retain: true }
-        );
-        logger.info(`Published outside temperature: ${tempC}°C`);
-      }
+    // Publish initial value (already converted to Celsius)
+    if (install.outsideTemperature.celsius !== null) {
+      const tempC = install.outsideTemperature.celsius;
+      this.mqttBridge.publishToHomeAssistant(
+        `homeassistant/sensor/rehau_${installId}_outside_temp/state`,
+        tempC.toString(),
+        { retain: true }
+      );
+      logger.info(`Published outside temperature: ${tempC}°C`);
     }
   }
 
-  private publishInstallationModeControl(install: RehauInstallation, currentMode: 'heat' | 'cool'): void {
+  private publishInstallationModeControl(install: IInstall, currentMode: 'heat' | 'cool'): void {
     const installId = install.unique;
     const installName = install.name;
     
@@ -473,19 +474,42 @@ class ClimateController {
     // This method is kept for compatibility
   }
 
-  updateInstallationData(install: RehauInstallation): void {
+  updateInstallationData(install: IInstall): void {
     // Update zones with fresh data from HTTP API
     const installId = install.unique;
+    
+    // Get zones from groups
+    if (install.groups && install.groups.length > 0) {
+      install.groups.forEach((group: IGroup) => {
+        if (group.zones && group.zones.length > 0) {
+          group.zones.forEach((zone: IZone) => {
+            if (zone.channels && zone.channels.length > 0) {
+              const zoneInfo: ExtendedZoneInfo = {
+                zoneId: zone.id,
+                zoneName: zone.name,
+                zoneNumber: zone.number,
+                groupName: group.name,
+                installId: installId,
+                installName: install.name,
+                channels: zone.channels
+              };
+              this.publishDiscoveryConfig(zoneInfo, installId, 'heat');
+              this.publishZoneSensors(zoneInfo, installId, install.name);
+            }
+          });
+        }
+      });
+    }
     
     // Determine installation mode (same logic as initialization)
     const zones: ExtendedZoneInfo[] = [];
     if (install.groups && install.groups.length > 0) {
-      install.groups.forEach(group => {
+      install.groups.forEach((group: IGroup) => {
         if (group.zones && group.zones.length > 0) {
-          group.zones.forEach(zone => {
+          group.zones.forEach((zone: IZone) => {
             if (zone.channels && zone.channels.length > 0) {
               zones.push({
-                zoneId: zone._id,
+                zoneId: zone.id,
                 zoneName: zone.name,
                 zoneNumber: zone.number,
                 groupName: group.name,
@@ -502,8 +526,8 @@ class ClimateController {
     const isActivelyCooling = zones.some(z => 
       z.channels && z.channels[0] && 
       (z.channels[0].demand ?? 0) > 0 && 
-      z.channels[0].setpoint_c_normal && 
-      !z.channels[0].setpoint_h_normal
+      z.channels[0].setpoints.coolingNormal.celsius !== null && 
+      z.channels[0].setpoints.heatingNormal.celsius === null
     );
     
     let systemSupportsCooling = false;
@@ -516,15 +540,13 @@ class ClimateController {
     
     // Re-publish outside temperature sensor discovery and state
     this.publishOutsideTemperatureSensor(install);
-    if (install.outside_temp !== undefined) {
-      const tempC = this.convertTemp(install.outside_temp);
-      if (tempC !== null) {
-        this.mqttBridge.publishToHomeAssistant(
-          `homeassistant/sensor/rehau_${installId}_outside_temp/state`,
-          tempC.toString(),
-          { retain: true }
-        );
-      }
+    if (install.outsideTemperature.celsius !== null) {
+      const tempC = install.outsideTemperature.celsius;
+      this.mqttBridge.publishToHomeAssistant(
+        `homeassistant/sensor/rehau_${installId}_outside_temp/state`,
+        tempC.toString(),
+        { retain: true }
+      );
     }
     
     // Re-publish installation mode control discovery
@@ -533,9 +555,9 @@ class ClimateController {
     }
     
     if (install.groups && install.groups.length > 0) {
-      install.groups.forEach(group => {
+      install.groups.forEach((group: IGroup) => {
         if (group.zones && group.zones.length > 0) {
-          group.zones.forEach(zone => {
+          group.zones.forEach((zone: IZone) => {
             if (zone.channels && zone.channels.length > 0) {
               const zoneNumber = zone.number;
               const zoneKey = `${installId}_zone_${zoneNumber}`;
@@ -546,11 +568,14 @@ class ClimateController {
               }
               
               // Re-publish zone discovery configs to ensure they persist
-              const zoneInfo: ZoneInfo = {
-                zoneId: zone._id,
+              const zoneInfo: ExtendedZoneInfo = {
+                zoneId: zone.id,
                 zoneName: zone.name,
                 zoneNumber: zone.number,
-                installName: install.name
+                groupName: group.name,
+                installId: installId,
+                installName: install.name,
+                channels: zone.channels
               };
               this.publishDiscoveryConfig(zoneInfo, installId, installationMode);
               this.publishZoneSensors(zoneInfo, installId, install.name);
@@ -566,45 +591,38 @@ class ClimateController {
     }
   }
 
-  private updateZoneFromChannel(zoneKey: string, state: ClimateState, channel: RehauChannel, installationMode: 'heat' | 'cool'): void {
-    // Current temperature
-    if (channel.temp_zone !== undefined) {
-      const temp = this.convertTemp(channel.temp_zone);
-      if (temp !== null) {
+  private updateZoneFromChannel(zoneKey: string, state: ClimateState, channel: IChannel, installationMode: 'heat' | 'cool'): void {
+    // Current temperature (already converted to Celsius)
+    if (channel.currentTemperature.celsius !== null) {
+      const temp = channel.currentTemperature.celsius;
+      if (temp !== state.currentTemperature) {
         state.currentTemperature = temp;
         this.publishCurrentTemperature(zoneKey, temp);
       }
     }
     
     // Humidity
-    if (channel.humidity !== undefined) {
-      state.humidity = channel.humidity;
-      this.publishHumidity(zoneKey, channel.humidity);
-    }
-    
-    // Target temperature
-    let targetTemp = null;
-    if (channel.setpoint_h_normal) {
-      targetTemp = channel.setpoint_h_normal;
-    } else if (channel.setpoint_c_normal) {
-      targetTemp = channel.setpoint_c_normal;
-    }
-    
-    if (targetTemp !== null) {
-      const setpoint = channel.setpoint_h_normal || channel.setpoint_c_normal;
-      if (setpoint) {
-        const targetTemp = this.convertTemp(setpoint);
-        if (targetTemp !== null && targetTemp !== state.targetTemperature) {
-          state.targetTemperature = targetTemp;
-          this.publishTargetTemperature(zoneKey, targetTemp);
-        }
+    if (channel.humidity !== null) {
+      if (channel.humidity !== state.humidity) {
+        state.humidity = channel.humidity;
+        this.publishHumidity(zoneKey, channel.humidity);
       }
     }
     
-    // Mode and Preset based on mode_used
-    if (channel.mode_used !== undefined) {
-      if (channel.mode_used === 2) {
-        // OFF - zone is off
+    // Target temperature (already converted to Celsius)
+    if (channel.setpointTemperature.celsius !== null) {
+      const targetTemp = channel.setpointTemperature.celsius;
+      if (targetTemp !== state.targetTemperature) {
+        state.targetTemperature = targetTemp;
+        this.publishTargetTemperature(zoneKey, targetTemp);
+      }
+    }
+    
+    // Mode and Preset based on mode
+    // mode: 0=COMFORT, 1=REDUCED, 2=STANDBY, 3=OFF
+    if (channel.mode !== null) {
+      if (channel.mode === 3 || channel.mode === 2) {
+        // OFF or STANDBY - zone is off
         state.mode = 'off';
         state.preset = null;
         this.publishMode(zoneKey, 'off');
@@ -618,7 +636,7 @@ class ClimateController {
           0: 'comfort',
           1: 'away'
         };
-        state.preset = (channel.mode_used in presetMap) ? presetMap[channel.mode_used] : 'comfort';
+        state.preset = (channel.mode in presetMap) ? presetMap[channel.mode] : 'comfort';
         if (state.preset) {
           this.publishPreset(zoneKey, state.preset);
         }
@@ -643,7 +661,7 @@ class ClimateController {
     
     if (payload.type === 'channel_update' && payload.data) {
       // channel_update: payload.data.data contains the actual channel data
-      const channelUpdatePayload = payload as { type: string; data: { data: RehauChannel } };
+      const channelUpdatePayload = payload as { type: string; data: { data: any } };
       const channelData = channelUpdatePayload.data.data;
       
       if (channelData) {
@@ -656,8 +674,8 @@ class ClimateController {
           return;
         }
         
-        // Use the shared update method (installationMode from state)
-        this.updateZoneFromChannel(zoneKey, state, channelData, state.installationMode);
+        // Handle raw MQTT channel data
+        this.updateZoneFromRawChannel(zoneKey, state, channelData, state.installationMode);
       }
     } else if (payload.zones && Array.isArray(payload.zones)) {
       // realtime/realtime.update: zones array
@@ -672,10 +690,61 @@ class ClimateController {
         
         if (zoneData.channels && zoneData.channels[0]) {
           const channel = zoneData.channels[0];
-          this.updateZoneFromChannel(zoneKey, state, channel, state.installationMode);
+          this.updateZoneFromRawChannel(zoneKey, state, channel, state.installationMode);
           logger.info(`Updated zone ${state.zoneName} from MQTT realtime`);
         }
       });
+    }
+  }
+
+  private updateZoneFromRawChannel(zoneKey: string, state: ClimateState, rawChannel: any, installationMode: 'heat' | 'cool'): void {
+    // Handle raw MQTT channel data (not typed IChannel)
+    // Current temperature
+    if (rawChannel.temp_zone !== undefined) {
+      const temp = this.convertTemp(rawChannel.temp_zone);
+      if (temp !== null && temp !== state.currentTemperature) {
+        state.currentTemperature = temp;
+        this.publishCurrentTemperature(zoneKey, temp);
+      }
+    }
+    
+    // Humidity
+    if (rawChannel.humidity !== undefined && rawChannel.humidity !== state.humidity) {
+      state.humidity = rawChannel.humidity;
+      this.publishHumidity(zoneKey, rawChannel.humidity);
+    }
+    
+    // Target temperature
+    const setpoint = rawChannel.setpoint_h_normal || rawChannel.setpoint_c_normal;
+    if (setpoint) {
+      const targetTemp = this.convertTemp(setpoint);
+      if (targetTemp !== null && targetTemp !== state.targetTemperature) {
+        state.targetTemperature = targetTemp;
+        this.publishTargetTemperature(zoneKey, targetTemp);
+      }
+    }
+    
+    // Mode and Preset based on mode_used
+    if (rawChannel.mode_used !== undefined) {
+      if (rawChannel.mode_used === 2 || rawChannel.mode_used === 3) {
+        // OFF or STANDBY
+        state.mode = 'off';
+        state.preset = null;
+        this.publishMode(zoneKey, 'off');
+      } else {
+        // Zone is on
+        state.mode = installationMode || state.mode;
+        this.publishMode(zoneKey, state.mode);
+        
+        const presetMap: Record<number, 'comfort' | 'away'> = {
+          0: 'comfort',
+          1: 'away'
+        };
+        state.preset = (rawChannel.mode_used in presetMap) ? presetMap[rawChannel.mode_used] : 'comfort';
+        if (state.preset) {
+          this.publishPreset(zoneKey, state.preset);
+        }
+      }
     }
   }
 

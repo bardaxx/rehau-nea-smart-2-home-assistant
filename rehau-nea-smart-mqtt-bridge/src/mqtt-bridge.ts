@@ -309,8 +309,8 @@ class RehauMQTTBridge {
       return;
     }
     
-    // Try switch command format (lock switch using zone ID)
-    match = topic.match(/switch\/rehau_([^/]+)_lock\/command/);
+    // Try lock command format (using zone ID)
+    match = topic.match(/lock\/rehau_([^/]+)_lock\/command/);
     if (match) {
       const [, zoneId] = match;
       logger.info(`Lock command: ${payload} for zone ${zoneId}`);

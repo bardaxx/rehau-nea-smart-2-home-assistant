@@ -53,12 +53,37 @@ export function redactSensitiveData(obj: any): any {
 }
 
 /**
+ * Safe JSON stringify that handles circular references
+ */
+function safeStringify(obj: any, indent: number = 2): string {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (_key, value) => {
+    // Handle circular references
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+    }
+    // Filter out functions
+    if (typeof value === 'function') {
+      return '[Function]';
+    }
+    return value;
+  }, indent);
+}
+
+/**
  * Log full message dump in debug mode (with redacted sensitive data)
  */
 export function debugDump(label: string, data: any): void {
   if (logLevel === 'debug') {
-    const redacted = redactSensitiveData(data);
-    logger.debug(`[DUMP] ${label}:\n${JSON.stringify(redacted, null, 2)}`);
+    try {
+      const redacted = redactSensitiveData(data);
+      logger.debug(`[DUMP] ${label}:\n${safeStringify(redacted, 2)}`);
+    } catch (error) {
+      logger.debug(`[DUMP] ${label}: [Unable to serialize data]`);
+    }
   }
 }
 
@@ -78,13 +103,17 @@ const logger = winston.createLogger({
         const filteredMeta = Object.entries(meta)
           .filter(([key, value]) => {
             if (key === 'stack') return false;
-            if (typeof value === 'object' && Object.keys(value as object).length === 0) return false;
+            if (typeof value === 'object' && value !== null && Object.keys(value as object).length === 0) return false;
             return true;
           })
           .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
         
         if (Object.keys(filteredMeta).length > 0) {
-          msg += ' ' + JSON.stringify(filteredMeta, null, 2);
+          try {
+            msg += ' ' + safeStringify(filteredMeta, 2);
+          } catch (error) {
+            msg += ' [Unable to serialize metadata]';
+          }
         }
       }
       

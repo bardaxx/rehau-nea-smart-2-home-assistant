@@ -231,11 +231,10 @@ class ClimateController {
     const groupNameSanitized = zone.groupName.toLowerCase().replace(/\s+/g, '_');
     const zoneNameSanitized = zone.zoneName.toLowerCase().replace(/\s+/g, '_');
     
-    // Build object_id and display name based on USE_GROUP_IN_NAMES
-    const objectId = USE_GROUP_IN_NAMES && zone.groupName
-      ? `rehau_${installNameSanitized}_${groupNameSanitized}_${zoneNameSanitized}`
-      : `rehau_${installNameSanitized}_${zoneNameSanitized}`;
+    // object_id always includes group name for entity ID
+    const objectId = `rehau_${installNameSanitized}_${groupNameSanitized}_${zoneNameSanitized}`;
     
+    // Display name controlled by USE_GROUP_IN_NAMES
     const displayName = USE_GROUP_IN_NAMES && zone.groupName
       ? `${zone.groupName} ${zone.zoneName}`
       : zone.zoneName;
@@ -320,11 +319,10 @@ class ClimateController {
     const groupNameSanitized = groupName.toLowerCase().replace(/\s+/g, '_');
     const zoneNameSanitized = zoneName.toLowerCase().replace(/\s+/g, '_');
     
-    // Build object_id and display name based on USE_GROUP_IN_NAMES
-    const objectIdBase = USE_GROUP_IN_NAMES && groupName
-      ? `rehau_${groupNameSanitized}_${zoneNameSanitized}`
-      : `rehau_${zoneNameSanitized}`;
+    // object_id always includes group name for entity ID
+    const objectIdBase = `rehau_${groupNameSanitized}_${zoneNameSanitized}`;
     
+    // Display name controlled by USE_GROUP_IN_NAMES
     const displayName = USE_GROUP_IN_NAMES && groupName
       ? `${groupName} - ${zoneName}`
       : zoneName;
@@ -678,10 +676,10 @@ class ClimateController {
       const groupNameSanitized = zone.groupName.toLowerCase().replace(/\s+/g, '_');
       const zoneNameSanitized = zone.zoneName.toLowerCase().replace(/\s+/g, '_');
       
-      const objectId = USE_GROUP_IN_NAMES && zone.groupName
-        ? `rehau_${installNameSanitized}_${groupNameSanitized}_${zoneNameSanitized}`
-        : `rehau_${installNameSanitized}_${zoneNameSanitized}`;
+      // object_id always includes group name
+      const objectId = `rehau_${installNameSanitized}_${groupNameSanitized}_${zoneNameSanitized}`;
       
+      // Display name controlled by USE_GROUP_IN_NAMES
       const displayName = USE_GROUP_IN_NAMES && zone.groupName 
         ? `${zone.groupName} ${zone.zoneName}` 
         : zone.zoneName;
@@ -719,13 +717,13 @@ class ClimateController {
       const groupNameSanitized = zone.groupName.toLowerCase().replace(/\s+/g, '_');
       const zoneNameSanitized = zone.zoneName.toLowerCase().replace(/\s+/g, '_');
       
+      // Display name controlled by USE_GROUP_IN_NAMES
       const displayName = USE_GROUP_IN_NAMES && zone.groupName
         ? `${zone.groupName} - ${zone.zoneName}`
         : zone.zoneName;
       
-      const objectIdBase = USE_GROUP_IN_NAMES && zone.groupName
-        ? `rehau_${groupNameSanitized}_${zoneNameSanitized}`
-        : `rehau_${zoneNameSanitized}`;
+      // object_id always includes group name
+      const objectIdBase = `rehau_${groupNameSanitized}_${zoneNameSanitized}`;
       
       // Temperature sensor
       logger.info(`${prefix} rehau_${zone.state.zoneId}_temperature/`);

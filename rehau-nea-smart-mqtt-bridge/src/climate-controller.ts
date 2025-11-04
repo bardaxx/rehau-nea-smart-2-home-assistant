@@ -950,6 +950,7 @@ class ClimateController {
           device_class: 'running',
           payload_on: 'ON',
           payload_off: 'OFF',
+          entity_category: 'diagnostic',
           device: {
             identifiers: [`rehau_${installId}`],
             name: `REHAU ${installName}`,
@@ -1102,6 +1103,7 @@ class ClimateController {
             state_topic: `${baseTopic}/state`,
             payload_on: 'ON',
             payload_off: 'OFF',
+            entity_category: 'diagnostic',
             device: {
               identifiers: [`rehau_${installId}`],
               name: `REHAU ${installName}`,
@@ -1131,6 +1133,7 @@ class ClimateController {
             state_topic: `${baseTopic}/state`,
             payload_on: 'ON',
             payload_off: 'OFF',
+            entity_category: 'diagnostic',
             device: {
               identifiers: [`rehau_${installId}`],
               name: `REHAU ${installName}`,

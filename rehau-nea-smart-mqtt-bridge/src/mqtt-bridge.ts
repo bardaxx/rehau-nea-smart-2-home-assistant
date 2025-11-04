@@ -294,12 +294,33 @@ class RehauMQTTBridge {
       const [, zoneId] = match;
       logger.info(`Ring light command: ${payload} for zone ${zoneId}`);
       
-      // Need to find zone number from zone ID
       // Emit as a special command that climate controller will handle
       this.messageHandlers.forEach(handler => {
         try {
           const command = {
             type: 'ring_light_command',
+            zoneId,
+            payload
+          };
+          handler(command as any);
+        } catch (error) {
+          // Ignore errors from handlers that don't expect this format
+        }
+      });
+      return;
+    }
+    
+    // Try switch command format (lock switch using zone ID)
+    match = topic.match(/switch\/rehau_([^/]+)_lock\/command/);
+    if (match) {
+      const [, zoneId] = match;
+      logger.info(`Lock command: ${payload} for zone ${zoneId}`);
+      
+      // Emit as a special command that climate controller will handle
+      this.messageHandlers.forEach(handler => {
+        try {
+          const command = {
+            type: 'lock_command',
             zoneId,
             payload
           };

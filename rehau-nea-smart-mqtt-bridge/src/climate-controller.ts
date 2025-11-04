@@ -42,6 +42,8 @@ class ClimateController {
         this.handleHomeAssistantCommand(topicOrCommand);
       } else if (typeof topicOrCommand === 'object' && (topicOrCommand as any).type === 'ring_light_command') {
         this.handleRingLightCommand((topicOrCommand as any).zoneId, (topicOrCommand as any).payload);
+      } else if (typeof topicOrCommand === 'object' && (topicOrCommand as any).type === 'lock_command') {
+        this.handleLockCommand((topicOrCommand as any).zoneId, (topicOrCommand as any).payload);
       } else if (typeof topicOrCommand === 'string' && payload) {
         // Check for LIVE data responses
         const msg = payload as RehauMQTTMessage;
@@ -421,11 +423,11 @@ class ClimateController {
       ? `${groupName} - ${zoneName}`
       : zoneName;
     
-    // 1. Locked Binary Sensor
-    const lockedConfig = {
-      name: `${displayName} Locked`,
-      object_id: `${objectIdBase}_locked`,
-      unique_id: `rehau_${zoneId}_locked`,
+    // 1. Lock Switch (controllable)
+    const lockConfig = {
+      name: `${displayName} Lock`,
+      object_id: `${objectIdBase}_lock`,
+      unique_id: `rehau_${zoneId}_lock`,
       device: {
         identifiers: [`rehau_${installId}`],
         name: `REHAU ${installName}`,
@@ -433,13 +435,15 @@ class ClimateController {
         model: 'NEA SMART 2.0',
         sw_version: '1.0.0'
       },
-      state_topic: `homeassistant/binary_sensor/rehau_${zoneId}_locked/state`,
-      device_class: 'lock',
+      state_topic: `homeassistant/switch/rehau_${zoneId}_lock/state`,
+      command_topic: `homeassistant/switch/rehau_${zoneId}_lock/command`,
       payload_on: 'ON',
       payload_off: 'OFF',
-      availability_topic: `homeassistant/binary_sensor/rehau_${zoneId}_locked/availability`,
+      availability_topic: `homeassistant/switch/rehau_${zoneId}_lock/availability`,
       payload_available: 'online',
-      payload_not_available: 'offline'
+      payload_not_available: 'offline',
+      optimistic: true,
+      icon: 'mdi:lock'
     };
     
     // 2. Ring Light Switch
@@ -461,13 +465,13 @@ class ClimateController {
       availability_topic: `homeassistant/light/rehau_${zoneId}_ring_light/availability`,
       payload_available: 'online',
       payload_not_available: 'offline',
-      optimistic: false
+      optimistic: true
     };
     
     // Publish discovery configs
     this.mqttBridge.publishToHomeAssistant(
-      `homeassistant/binary_sensor/rehau_${zoneId}_locked/config`,
-      lockedConfig,
+      `homeassistant/switch/rehau_${zoneId}_lock/config`,
+      lockConfig,
       { retain: true }
     );
     
@@ -479,7 +483,7 @@ class ClimateController {
     
     // Publish availability
     this.mqttBridge.publishToHomeAssistant(
-      `homeassistant/binary_sensor/rehau_${zoneId}_locked/availability`,
+      `homeassistant/switch/rehau_${zoneId}_lock/availability`,
       'online',
       { retain: true }
     );
@@ -491,12 +495,12 @@ class ClimateController {
     );
     
     // Publish initial states
-    const lockedState = channel.config.locked ? 'ON' : 'OFF';
+    const lockState = channel.config.locked ? 'ON' : 'OFF';
     const ringLightState = channel.config.ringActivation ? 'ON' : 'OFF';
     
     this.mqttBridge.publishToHomeAssistant(
-      `homeassistant/binary_sensor/rehau_${zoneId}_locked/state`,
-      lockedState,
+      `homeassistant/switch/rehau_${zoneId}_lock/state`,
+      lockState,
       { retain: true }
     );
     
@@ -506,7 +510,10 @@ class ClimateController {
       { retain: true }
     );
     
-    // Subscribe to ring light commands
+    // Subscribe to commands
+    this.mqttBridge.subscribeToHomeAssistant(
+      `homeassistant/switch/rehau_${zoneId}_lock/command`
+    );
     this.mqttBridge.subscribeToHomeAssistant(
       `homeassistant/light/rehau_${zoneId}_ring_light/command`
     );
@@ -925,9 +932,9 @@ class ClimateController {
       }
     }
     
-    // Ring light and locked states
+    // Ring light and lock states
     this.publishRingLightState(state.zoneId, channel.config.ringActivation);
-    this.publishLockedState(state.zoneId, channel.config.locked);
+    this.publishLockState(state.zoneId, channel.config.locked);
   }
 
   private handleRehauUpdate(topic: string, payload: RehauMQTTMessage): void {
@@ -1033,12 +1040,12 @@ class ClimateController {
       }
     }
     
-    // Ring light and locked states from raw channel data
+    // Ring light and lock states from raw channel data
     if (rawChannel.cc_config_bits) {
       const ringActivation = rawChannel.cc_config_bits.ring_activation === true;
       const locked = rawChannel.cc_config_bits.lock === true;
       this.publishRingLightState(state.zoneId, ringActivation);
-      this.publishLockedState(state.zoneId, locked);
+      this.publishLockState(state.zoneId, locked);
     }
   }
 
@@ -1162,10 +1169,10 @@ class ClimateController {
     );
   }
 
-  private publishLockedState(zoneId: string, locked: boolean): void {
+  private publishLockState(zoneId: string, locked: boolean): void {
     const state = locked ? 'ON' : 'OFF';
     this.mqttBridge.publishToHomeAssistant(
-      `homeassistant/binary_sensor/rehau_${zoneId}_locked/state`,
+      `homeassistant/switch/rehau_${zoneId}_lock/state`,
       state,
       { retain: true }
     );
@@ -1268,6 +1275,33 @@ class ClimateController {
       logger.info(`Set zone ${foundState.zoneName} ring light to ${payload}`);
     } catch (error) {
       logger.error(`Failed to handle ring light command for zone ${foundState.zoneName}:`, (error as Error).message);
+    }
+  }
+
+  private handleLockCommand(zoneId: string, payload: string): void {
+    // Find the zone by zoneId
+    let foundState: ClimateState | undefined;
+    let foundKey: string | undefined;
+    
+    for (const [key, state] of this.installations.entries()) {
+      if (state.zoneId === zoneId) {
+        foundState = state;
+        foundKey = key;
+        break;
+      }
+    }
+    
+    if (!foundState || !foundKey) {
+      logger.warn(`Zone with ID ${zoneId} not found for lock command`);
+      return;
+    }
+    
+    try {
+      const lockValue = payload === 'ON' ? 1 : 0;
+      this.sendRehauCommand(foundState.installId, foundState.zoneNumber, foundState.channelNumber, { "lock": lockValue });
+      logger.info(`Set zone ${foundState.zoneName} lock to ${payload}`);
+    } catch (error) {
+      logger.error(`Failed to handle lock command for zone ${foundState.zoneName}:`, (error as Error).message);
     }
   }
 

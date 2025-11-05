@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.3.0] - 2025-11-05
+
+### 🔴 **Critical Bug Fix**
+- **Fixed zone collision bug for installations with multiple groups**
+  - Zones with same number in different groups were overwriting each other
+  - Example: Upstairs Zone 0 (Landing) + Downstairs Zone 0 (Kitchen) → only Kitchen visible
+  - Used non-unique zone numbers in MQTT topics causing collisions
+  
+### Fixed
+- Changed MQTT topics from `zone_${zoneNumber}` to `rehau_${zoneId}` (unique channel ID)
+- All zones now have unique MQTT topics regardless of group
+- Fixed duplicate subscriptions (same topic subscribed multiple times)
+- Fixed missing zones (zones were being overwritten by later zones with same number)
+
+### Impact
+- **Before**: Installations with 9 zones might only see 6-7 zones
+- **After**: All zones visible and functional
+- **Breaking**: MQTT topics changed, users need to restart add-on (HA will auto-discover new topics)
+
+### Example Fix
+**Before (BROKEN)**:
+- `homeassistant/climate/rehau_6ba0..._zone_0/` → Used by 3 different zones (collision!)
+
+**After (FIXED)**:
+- `homeassistant/climate/rehau_6595d1d5cceecee9ce9772e1/` → Landing (unique)
+- `homeassistant/climate/rehau_6595d1e16c9645c4cf338302/` → Kitchen (unique)
+- `homeassistant/climate/rehau_6618fa32839d609d2e344339/` → Bedroom 5 (unique)
+
 ## [2.2.7] - 2025-11-05
 
 ### Improved

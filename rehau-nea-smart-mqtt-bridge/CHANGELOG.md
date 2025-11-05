@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3] - 2025-11-05
+
+### Fixed
+- Corrected config.yaml schema format to match Home Assistant requirements
+- Fixed repository validation errors preventing add-on installation
+- Schema now uses proper HA types (email, password, port, list, int ranges)
+
 ## [2.2.2] - 2025-11-05
 
 ### Improved

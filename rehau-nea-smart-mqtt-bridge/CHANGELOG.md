@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.5] - 2025-11-05
+
+### Improved
+- Shortened timestamp format from ISO to [HH:mm:ss] for cleaner logs
+- All MQTT log messages now clearly specify which broker (REHAU or Home Assistant)
+- Added visual emojis for better log scanning (🔌 ✅ 🔄 ⚠️ 📴 ❌ ⏳ 📊 📋)
+- Fixed duplicate log line in HA subscription
+- Improved template string formatting
+
 ## [2.2.4] - 2025-11-05
 
 ### Fixed

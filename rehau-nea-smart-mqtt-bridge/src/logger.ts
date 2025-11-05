@@ -115,11 +115,11 @@ const logger = winston.createLogger({
   level: logLevel,
   format: winston.format.combine(
     winston.format.timestamp({
-      format: 'YYYY-MM-DDTHH:mm:ss.SSSZ'
+      format: 'HH:mm:ss'
     }),
     winston.format.errors({ stack: true }),
     winston.format.printf(({ timestamp, level, message, ...meta }) => {
-      let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
+      let msg = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
       
       // Add metadata if present
       if (Object.keys(meta).length > 0) {

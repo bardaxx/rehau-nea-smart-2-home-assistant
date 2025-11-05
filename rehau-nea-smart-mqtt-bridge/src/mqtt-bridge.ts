@@ -48,7 +48,7 @@ class RehauMQTTBridge {
 
   private async connectToRehau(): Promise<void> {
     return new Promise((resolve, reject) => {
-      logger.info('Connecting to REHAU MQTT broker...');
+      logger.info('🔌 Connecting to REHAU MQTT broker...');
       
       const rehauUrl = 'wss://mqtt.nea2aws.aws.rehau.cloud:443/mqtt';
       const username = `${this.rehauAuth.getEmail()}?x-amz-customauthorizer-name=app-front`;
@@ -132,7 +132,7 @@ class RehauMQTTBridge {
       });
 
       this.rehauClient.on('error', (error) => {
-        logger.error('REHAU MQTT error:', error.message);
+        logger.error('❌ REHAU MQTT error:', error.message);
         logger.error('Error details:', error);
         reject(error);
       });
@@ -159,7 +159,7 @@ class RehauMQTTBridge {
 
   private async connectToHomeAssistant(): Promise<void> {
     return new Promise((resolve, reject) => {
-      logger.info('Connecting to Home Assistant MQTT broker...');
+      logger.info('🔌 Connecting to Home Assistant MQTT broker...');
       
       const haUrl = `mqtt://${this.mqttConfig.host}:${this.mqttConfig.port}`;
       
@@ -212,7 +212,7 @@ class RehauMQTTBridge {
       });
 
       this.haClient.on('error', (error) => {
-        logger.error('Home Assistant MQTT error:', error.message);
+        logger.error('❌ Home Assistant MQTT error:', error.message);
         reject(error);
       });
 
@@ -438,22 +438,22 @@ class RehauMQTTBridge {
     this.haSubscriptions.add(topic);
     
     if (!this.haClient || !this.haClient.connected) {
-      logger.warn(`Home Assistant MQTT not connected yet, queued subscription: ${topic}`);
+      logger.warn(`⏳ Home Assistant MQTT not connected yet, queued subscription: ${topic}`);
       return;
     }
     
     this.haClient.subscribe(topic, (err) => {
       if (!err) {
-        logger.info(`Subscribed to HA command topic: ${topic}`);
+        logger.info(`✅ Subscribed to HA command topic: ${topic}`);
       } else {
-        logger.error(`Failed to subscribe to ${topic}:`, err);
+        logger.error(`❌ Failed to subscribe to ${topic}:`, err);
       }
     });
   }
 
   publishToHomeAssistant(topic: string, payload: string | object, options: IClientPublishOptions = {}): void {
     if (!this.haClient || !this.haClient.connected) {
-      logger.warn('Home Assistant MQTT not connected, cannot publish');
+      logger.warn('⚠️  Home Assistant MQTT not connected, cannot publish');
       return;
     }
     
@@ -469,7 +469,7 @@ class RehauMQTTBridge {
 
   publishToRehau(topic: string, payload: string | object): void {
     if (!this.rehauClient || !this.rehauClient.connected) {
-      logger.warn('REHAU MQTT not connected, cannot publish');
+      logger.warn('⚠️  REHAU MQTT not connected, cannot publish');
       return;
     }
     
@@ -553,7 +553,7 @@ class RehauMQTTBridge {
   }
 
   async disconnect(): Promise<void> {
-    logger.info('Disconnecting from MQTT brokers...');
+    logger.info('🔌 Disconnecting from MQTT brokers...');
     
     if (this.referentialsTimer) {
       clearInterval(this.referentialsTimer);

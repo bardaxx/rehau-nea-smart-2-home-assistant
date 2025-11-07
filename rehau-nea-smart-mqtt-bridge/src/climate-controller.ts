@@ -121,7 +121,7 @@ class ClimateController {
     
     // Initialize state for each zone
     zones.forEach(zone => {
-      const zoneKey = `${installId}_zone_${zone.zoneNumber}`;
+      const zoneKey = `${installId}_zone_${zone.zoneId}`;
       
       // Register names for obfuscation
       registerObfuscation('group', zone.groupName);
@@ -246,7 +246,7 @@ class ClimateController {
   }
 
   private publishDiscoveryConfig(zone: ExtendedZoneInfo, installId: string, systemMode: 'heat' | 'cool'): void {
-    const zoneKey = `${installId}_zone_${zone.zoneNumber}`;
+    const zoneKey = `${installId}_zone_${zone.zoneId}`;
     
     // Sanitize names for IDs (lowercase, replace spaces with underscores)
     const installNameSanitized = zone.installName.toLowerCase().replace(/\s+/g, '_');
@@ -723,8 +723,8 @@ class ClimateController {
         if (group.zones && group.zones.length > 0) {
           group.zones.forEach((zone: IZone) => {
             if (zone.channels && zone.channels.length > 0) {
-              const zoneNumber = zone.number;
-              const zoneKey = `${installId}_zone_${zoneNumber}`;
+              const zoneId = zone.id;
+              const zoneKey = `${installId}_zone_${zoneId}`;
               const state = this.installations.get(zoneKey);
               
               if (!state) {
@@ -982,16 +982,42 @@ class ClimateController {
       const channelData = channelUpdatePayload.data.data;
       
       if (channelData) {
-        // channel_zone is the zone number (0, 1, 2, 3)
-        const zoneNumber = channelData.channel_zone;
-        const zoneKey = `${installId}_zone_${zoneNumber}`;
+        // Find zone by channel_zone number and controller
+        // We need to look up the zone ID from the channel data
+        const channelId = channelData._id || channelData.id;
+        let zoneKey: string | null = null;
+        
+        // Find the state by matching channel ID
+        for (const [key, state] of this.installations.entries()) {
+          if (state.installId === installId) {
+            // Check if this zone's channel matches
+            const installData = this.installationData.get(installId);
+            if (installData && installData.groups) {
+              for (const group of installData.groups) {
+                for (const zone of group.zones) {
+                  if (zone.channels && zone.channels[0] && zone.channels[0].id === channelId) {
+                    zoneKey = key;
+                    break;
+                  }
+                }
+                if (zoneKey) break;
+              }
+            }
+          }
+          if (zoneKey) break;
+        }
+        
+        if (!zoneKey) {
+          return;
+        }
+        
         const state = this.installations.get(zoneKey);
         
         if (!state) {
           return;
         }
         
-        const groupName = this.getGroupNameForZone(installId, zoneNumber);
+        const groupName = this.getGroupNameForZone(installId, state.zoneNumber);
         logger.info(`📨 Processing MQTT channel_update:`);
         logger.info(`   Group: ${groupName}`);
         logger.info(`   Zone: ${state.zoneName}`);
@@ -1001,9 +1027,9 @@ class ClimateController {
       }
     } else if (payload.zones && Array.isArray(payload.zones)) {
       // realtime/realtime.update: zones array
-      payload.zones.forEach(zoneData => {
-        const zoneNumber = zoneData.number;
-        const zoneKey = `${installId}_zone_${zoneNumber}`;
+      payload.zones.forEach((zoneData: any) => {
+        const zoneId = zoneData.id || zoneData._id;
+        const zoneKey = `${installId}_zone_${zoneId}`;
         const state = this.installations.get(zoneKey);
         
         if (!state) {
@@ -1012,7 +1038,7 @@ class ClimateController {
         
         if (zoneData.channels && zoneData.channels[0]) {
           const channel = zoneData.channels[0];
-          const groupName = this.getGroupNameForZone(installId, zoneNumber);
+          const groupName = this.getGroupNameForZone(installId, state.zoneNumber);
           
           logger.info(`📨 Processing MQTT realtime update:`);
           logger.info(`   Group: ${groupName}`);
@@ -1447,14 +1473,28 @@ class ClimateController {
   }
 
   private async handleHomeAssistantCommand(command: HACommand): Promise<void> {
-    const { installId, zoneNumber, commandType, payload } = command;
-    const zoneKey = `${installId}_zone_${zoneNumber}`;
-    const state = this.installations.get(zoneKey);
+    const { zoneNumber, commandType, payload } = command;
+    // The zoneNumber in HACommand is actually the zoneId from the MQTT topic
+    const zoneId = zoneNumber;
     
-    if (!state) {
-      logger.warn(`Zone ${zoneKey} not found for command`);
+    // Find the state by zoneId (search through all installations)
+    let state: ClimateState | undefined;
+    let zoneKey: string | undefined;
+    
+    for (const [key, s] of this.installations.entries()) {
+      if (s.zoneId === zoneId) {
+        state = s;
+        zoneKey = key;
+        break;
+      }
+    }
+    
+    if (!state || !zoneKey) {
+      logger.warn(`Zone ${zoneId} not found for command`);
       return;
     }
+    
+    const installId = state.installId;
     
     try {
       if (commandType === 'mode') {

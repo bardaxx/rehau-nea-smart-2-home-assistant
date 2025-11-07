@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.3.3] - 2025-11-07
+
+### 🚨 BREAKING CHANGES - REQUIRES CLEAN REINSTALL
+
+**⚠️ This version contains breaking changes. You MUST:**
+1. **Delete all existing REHAU entities** from Home Assistant before upgrading
+2. **Remove the add-on completely** and reinstall from scratch
+3. All MQTT topics have changed - old entities will become unavailable
+
+### Fixed
+- **Critical Bug Fix: Zone Mapping Collision**
+  - Fixed issue where zones with duplicate numbers across different controllers would overwrite each other
+  - Changed zone identification from `zone.number` to `zone.id` (MongoDB ObjectId) for unique identification
+  - Resolves temperature readings being published to wrong zones in multi-controller installations
+  - Example: Previously Zone_1 (controller 0, zone 0) and Zone_7 (controller 1, zone 0) would conflict
+  - Now each zone is uniquely identified regardless of controller or zone number
+
+### Changed
+- **Simplified MQTT Topic Structure**
+  - **OLD:** `homeassistant/climate/rehau_{installId}_zone_{zoneNumber}/...`
+  - **NEW:** `homeassistant/climate/rehau_{zoneId}/...`
+  - Topics now use only the unique zone ID (MongoDB ObjectId)
+  - Cleaner, shorter topics that are truly unique
+  - Applies to all entity types: climate, sensors, lights, locks
+
+### Migration Guide
+See README.md for detailed migration instructions and entity naming table.
+
 ## [2.3.2] - 2025-11-07
 
 ### Changed

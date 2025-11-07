@@ -377,24 +377,26 @@ class RehauMQTTBridge {
   }
 
   private handleHomeAssistantCommand(topic: string, payload: string): void {
-    // Extract installation ID and command type from topic
-    // Format: homeassistant/climate/rehau_{installId}_zone_{zoneNumber}/mode_command
+    // Extract zone ID and command type from topic
+    // Format: homeassistant/climate/rehau_{zoneId}/mode_command
     // Format: homeassistant/light/rehau_{zoneId}_ring_light/command
     logger.debug(`HA Command received: topic=${topic}, payload=${payload}`);
     
     // Try climate command format first
-    let match = topic.match(/rehau_([^/]+)_zone_(\d+)\/(.+)_command/);
+    // Match zone ID (MongoDB ObjectId format: 24 hex characters)
+    let match = topic.match(/climate\/rehau_([a-f0-9]{24})\/(.+)_command/);
     if (match) {
-      const [, installId, zoneNumber, commandType] = match;
-      logger.info(`Command: ${commandType} = ${payload} for zone ${zoneNumber}`);
+      const [, zoneId, commandType] = match;
+      logger.info(`Command: ${commandType} = ${payload} for zone ${zoneId}`);
       
-      // Emit command event for climate controller to handle
+      // Find the installId from the zone
+      // We need to look up which installation this zone belongs to
       this.messageHandlers.forEach(handler => {
         try {
           const command: HACommand = {
             type: 'ha_command',
-            installId,
-            zoneNumber: parseInt(zoneNumber),
+            installId: '', // Will be determined by climate controller from zoneId
+            zoneNumber: zoneId, // This is actually zoneId
             commandType: commandType as 'mode' | 'preset' | 'temperature',
             payload
           };

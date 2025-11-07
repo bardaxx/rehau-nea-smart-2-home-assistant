@@ -2,7 +2,11 @@
 
 Home Assistant add-on for REHAU NEA SMART 2.0 heating system integration via MQTT.
 
-> **⚠️ IMPORTANT:** Version 2.0+ introduces breaking changes. See [BREAKING CHANGES](rehau-nea-smart-mqtt-bridge/README.md#️-breaking-changes) and [CHANGELOG](rehau-nea-smart-mqtt-bridge/CHANGELOG.md#220---2025-11-05) for migration details.
+> **🚨 CRITICAL: Version 2.3.3 REQUIRES CLEAN REINSTALL**
+>
+> This version fixes a critical zone mapping bug but requires complete removal and reinstallation.
+> **YOU MUST DELETE ALL EXISTING REHAU ENTITIES BEFORE UPGRADING.**
+> See [Migration Guide](rehau-nea-smart-mqtt-bridge/README.md#-migration-guide-v233) for detailed steps.
 
 ## Installation
 

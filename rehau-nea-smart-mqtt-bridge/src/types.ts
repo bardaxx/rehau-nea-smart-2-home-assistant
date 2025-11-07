@@ -128,7 +128,7 @@ export interface RehauChannelUpdateMessage {
 export interface HACommand {
   type: 'ha_command';
   installId: string;
-  zoneNumber: number;
+  zoneNumber: string; // This is actually zoneId (MongoDB ObjectId string)
   commandType: 'mode' | 'preset' | 'temperature' | 'ring_light';
   payload: string;
 }

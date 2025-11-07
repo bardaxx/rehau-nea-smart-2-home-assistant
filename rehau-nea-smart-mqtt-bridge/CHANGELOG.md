@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2] - 2025-11-07
+
+### Changed
+- Increased zone_reload_interval maximum from 3600 to 86400 seconds (24 hours)
+  - Allows users to set longer polling intervals if desired
+  - Reduces API calls for installations that don't need frequent updates
+
 ## [2.3.1] - 2025-11-07
 
 ### Improved

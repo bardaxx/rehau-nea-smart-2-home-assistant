@@ -987,14 +987,13 @@ class ClimateController {
     // - realtime: payload.zones contains zones array
     
     if (payload.type === 'channel_update' && payload.data) {
-      // channel_update: payload.data.data contains the actual channel data
-      const channelUpdatePayload = payload as { type: string; data: { data: any } };
+      // channel_update: payload.data contains channel ID and data
+      const channelUpdatePayload = payload as { type: string; data: { channel: string; data: any } };
+      const channelId = channelUpdatePayload.data.channel; // CORRECT: Get channel ID from data.channel
       const channelData = channelUpdatePayload.data.data;
       
-      if (channelData) {
-        // Find zone by channel_zone number and controller
-        // We need to look up the zone ID from the channel data
-        const channelId = channelData._id || channelData.id;
+      if (channelData && channelId) {
+        // Find zone by matching channel ID
         let zoneKey: string | null = null;
         
         // Find the state by matching channel ID

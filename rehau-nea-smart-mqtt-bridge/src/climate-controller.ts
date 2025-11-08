@@ -300,6 +300,16 @@ class ClimateController {
       logger.info('\n✅ No routing conflicts - All zones have unique routing keys');
     }
     
+    // Reverse lookup table: Zone ID -> Routing
+    logger.info('\n');
+    logger.info('Reverse Lookup Table (ID → Routing):');
+    logger.info('─'.repeat(63));
+    
+    zones.forEach(zone => {
+      const shortId = zone.zoneId.substring(zone.zoneId.length - 8);
+      logger.info(`✓  ${zone.zoneName.padEnd(20)} (${shortId}) → (${zone.channelZone}, ${zone.controllerNumber})`);
+    });
+    
     logger.info('');
     logger.info('═══════════════════════════════════════════════════════════════');
     logger.info('');

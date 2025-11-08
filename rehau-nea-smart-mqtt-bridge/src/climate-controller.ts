@@ -306,8 +306,7 @@ class ClimateController {
     logger.info('─'.repeat(63));
     
     zones.forEach(zone => {
-      const shortId = zone.zoneId.substring(zone.zoneId.length - 8);
-      logger.info(`✓  ${zone.zoneName.padEnd(20)} (${shortId}) → (${zone.channelZone}, ${zone.controllerNumber})`);
+      logger.info(`✓  ${zone.zoneName.padEnd(20)} ${zone.zoneId} → (${zone.channelZone}, ${zone.controllerNumber})`);
     });
     
     logger.info('');

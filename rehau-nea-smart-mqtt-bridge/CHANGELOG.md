@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.5.0] - 2025-11-08
+
+### 🐛 Fixed - CRITICAL: Zone Association and Setpoint Handling
+
+**This version fixes critical bugs in zone routing and temperature setpoint handling.**
+
+#### Zone Association Bug
+**Problem:** MQTT channel updates were being associated with the wrong zone, causing state updates to be published to incorrect Home Assistant entities (e.g., Zone 4 updates published to Zone 1).
+
+**Root Cause:**
+- Channel ID was incorrectly extracted from `channelData._id` instead of `payload.data.channel`
+- Slow nested loop search through installations/groups/zones for every update
+
+**Fix:**
+- Extract channel ID from correct location: `payload.data.channel`
+- Added `channelToZoneKey` Map for O(1) channel-to-zone lookup
+- Populated during zone initialization with channel ID → zone key mapping
+- Replaced O(n×m×z) nested loops with instant Map lookup
+
+#### Missing Setpoint Publications
+**Problem:** Target temperature was not being published during MQTT channel updates.
+
+**Root Cause:**
+- Setpoint was processed before mode determination
+- Used wrong setpoint (always comfort, ignored away/reduced)
+- Wrong logic with `||` operator
+
+**Fix:**
+- Reordered: Process mode FIRST, then setpoint
+- Select correct setpoint based on BOTH mode and preset:
+  - Heat + Comfort → `setpoint_h_normal`
+  - Heat + Away → `setpoint_h_reduced`
+  - Cool + Comfort → `setpoint_c_normal`
+  - Cool + Away → `setpoint_c_reduced`
+- Only publish setpoint when zone is not OFF
+
+#### Improved Logging
+**Enhanced MQTT update logs to show all setpoint values:**
+- Before: `setpoint_heat=22°C` (misleading in away mode)
+- After: `setpoint_heat_comfort=22°C, setpoint_heat_away=23.5°C` (clear which is used)
+
+### Technical Details
+- Added `channelToZoneKey: Map<string, string>` for fast lookups
+- Updated `updateZoneFromRawChannel` to process mode before setpoint
+- Updated `mqtt-bridge.ts` logging to show all setpoint variants
+- Zone keys use unique database IDs, supporting duplicate zone numbers across groups
+
 ## [2.4.0] - 2025-11-08
 
 ### 🔧 Fixed - CRITICAL: REHAU Command Message Structure

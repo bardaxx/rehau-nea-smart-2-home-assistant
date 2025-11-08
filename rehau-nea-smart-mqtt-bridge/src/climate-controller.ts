@@ -1506,20 +1506,29 @@ class ClimateController {
     // The zoneNumber in HACommand is actually the zoneId from the MQTT topic
     const zoneId = zoneNumber;
     
+    logger.debug(`🔍 Looking up zone ${zoneId} for ${commandType} command`);
+    logger.debug(`   Total zones in map: ${this.installations.size}`);
+    
     // Find the state by zoneId (search through all installations)
     let state: ClimateState | undefined;
     let zoneKey: string | undefined;
     
     for (const [key, s] of this.installations.entries()) {
+      logger.debug(`   Checking ${key}: zoneId=${s.zoneId}, zoneName=${s.zoneName}`);
       if (s.zoneId === zoneId) {
         state = s;
         zoneKey = key;
+        logger.debug(`   ✅ MATCH FOUND: ${s.zoneName} (channelZone=${s.channelZone}, controller=${s.controllerNumber})`);
         break;
       }
     }
     
     if (!state || !zoneKey) {
       logger.warn(`Zone ${zoneId} not found for command`);
+      logger.warn(`Available zones:`);
+      for (const [key, s] of this.installations.entries()) {
+        logger.warn(`  - ${key}: ${s.zoneName} (zoneId=${s.zoneId})`);
+      }
       return;
     }
     
@@ -1556,6 +1565,9 @@ class ClimateController {
         // Temperature command
         const tempCelsius = parseFloat(payload);
         const tempF10 = Math.round((tempCelsius * 10) * 1.8 + 320);
+        logger.info(`Command: temperature = ${tempCelsius} for zone ${zoneId}`);
+        logger.info(`  Zone name: ${state.zoneName} (zoneNumber=${state.zoneNumber})`);
+        logger.info(`  Routing: channelZone=${state.channelZone}, controller=${state.controllerNumber}`);
         this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, { "2": tempF10 });
         logger.info(`Set zone ${state.zoneName} temperature to ${tempCelsius}°C (${tempF10})`);
       } else if (commandType === 'ring_light') {

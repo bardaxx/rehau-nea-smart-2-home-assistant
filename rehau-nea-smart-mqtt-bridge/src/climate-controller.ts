@@ -215,15 +215,23 @@ class ClimateController {
       if (currentTemp !== null) {
         this.publishCurrentTemperature(zoneKey, currentTemp);
       }
-      if (targetTemp !== null) {
-        this.publishTargetTemperature(zoneKey, targetTemp);
-      }
       if (humidity !== null) {
         this.publishHumidity(zoneKey, humidity);
       }
       this.publishMode(zoneKey, mode);
-      if (preset !== null && preset !== undefined) {
-        this.publishPreset(zoneKey, preset);
+      
+      // Handle OFF mode: publish "none" for preset and empty for target_temperature
+      if (mode === 'off') {
+        this.publishPresetNone(zoneKey);
+        this.publishTargetTemperatureNone(zoneKey);
+      } else {
+        // Only publish actual values when zone is ON
+        if (targetTemp !== null) {
+          this.publishTargetTemperature(zoneKey, targetTemp);
+        }
+        if (preset !== null && preset !== undefined) {
+          this.publishPreset(zoneKey, preset);
+        }
       }
       
       logger.info(`Initialized climate for zone: ${zone.zoneName} - ${currentTemp}°C → ${targetTemp}°C, ${humidity}% (${mode}, ${preset})`);
@@ -1403,11 +1411,11 @@ class ClimateController {
     logger.info(`   Group: ${groupName}`);
     logger.info(`   Zone: ${state.zoneName}`);
     logger.info(`   Entity: preset`);
-    logger.info(`   Value: None (zone is OFF)`);
+    logger.info(`   Value: "none" (zone is OFF)`);
     
     this.mqttBridge.publishToHomeAssistant(
       topic,
-      'None',
+      'none',
       { retain: true }
     );
   }
@@ -1424,11 +1432,11 @@ class ClimateController {
     logger.info(`   Group: ${groupName}`);
     logger.info(`   Zone: ${state.zoneName}`);
     logger.info(`   Entity: target_temperature`);
-    logger.info(`   Value: None (zone is OFF)`);
+    logger.info(`   Value: "" (empty - zone is OFF)`);
     
     this.mqttBridge.publishToHomeAssistant(
       topic,
-      'None',
+      '',
       { retain: true }
     );
   }

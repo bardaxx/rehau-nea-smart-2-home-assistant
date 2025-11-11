@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.1] - 2025-11-11
+
+### 🚀 Improvements
+- Added a sequential command queue with configurable retry and timeout handling to improve reliability of REHAU MQTT commands.@home_assistant_addon_typescript/rehau-nea-smart-mqtt-bridge/src/climate-controller.ts#1861-2086
+- Exposed new environment variables `COMMAND_RETRY_TIMEOUT` and `COMMAND_MAX_RETRIES` for tuning retry behaviour.@home_assistant_addon_typescript/rehau-nea-smart-mqtt-bridge/.env.example#21-24
+
+### 🛠 Fixes
+- Auto-confirm ring light and lock commands to match REHAU's behaviour where confirmations are never emitted, preventing the queue from stalling.@home_assistant_addon_typescript/rehau-nea-smart-mqtt-bridge/src/climate-controller.ts#1901-1971
+- Simplified confirmation logic to zone-based matching and added cleanup for command timers, eliminating false timeouts and resource leaks.@home_assistant_addon_typescript/rehau-nea-smart-mqtt-bridge/src/climate-controller.ts#1964-2362
+
+---
+
 ## [2.7.0] - 2025-11-09
 
 ### ✨ New Features

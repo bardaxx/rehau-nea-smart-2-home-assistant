@@ -1,5 +1,5 @@
 # Support both Home Assistant addon (BUILD_FROM) and standalone (node:20-alpine) builds
-ARG BUILD_FROM=node:20-alpine
+ARG BUILD_FROM=node:20.14-alpine
 FROM $BUILD_FROM
 
 # Install Node.js and npm if not already present (needed for HA base images)
@@ -35,5 +35,9 @@ COPY run.sh /
 
 # Make run script executable
 RUN chmod a+x /run.sh
+
+# Health check to monitor service liveness
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
 CMD [ "/run.sh" ]

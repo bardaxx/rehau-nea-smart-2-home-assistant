@@ -1,5 +1,12 @@
 # REHAU NEA SMART 2.0 - Home Assistant Add-on
 
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg?logo=typescript)
+![Node.js](https://img.shields.io/badge/Node.js-20.14-green.svg?logo=node.js)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg?logo=docker)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Add--on-orange.svg?logo=home-assistant)
+![MQTT](https://img.shields.io/badge/MQTT-Bridge-brightgreen.svg)
+
 TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems with Home Assistant integration.
 
 > **⚠️ DISCLAIMER:** This is an unofficial, community-developed integration. It is **NOT affiliated with, endorsed by, or supported by REHAU AG or REHAU Industries SE & Co. KG**. REHAU® and NEA SMART® are registered trademarks of REHAU. Use this software at your own risk.

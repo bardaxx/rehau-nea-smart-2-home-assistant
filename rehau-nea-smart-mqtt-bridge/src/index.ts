@@ -1,4 +1,3 @@
-import http from 'http';
 import dotenv from 'dotenv';
 
 // Load environment variables FIRST before importing logger
@@ -8,6 +7,7 @@ import logger, { registerObfuscation } from './logger';
 import RehauAuthPersistent from './rehau-auth';
 import RehauMQTTBridge from './mqtt-bridge';
 import ClimateController from './climate-controller';
+import { ConfigValidator } from './config-validator';
 
 interface Config {
   rehau: {
@@ -19,9 +19,6 @@ interface Config {
     port: number;
     username?: string;
     password?: string;
-  };
-  api: {
-    port: number;
   };
 }
 
@@ -36,32 +33,69 @@ const config: Config = {
     port: parseInt(process.env.MQTT_PORT || '1883'),
     username: process.env.MQTT_USER,
     password: process.env.MQTT_PASSWORD
-  },
-  api: {
-    port: parseInt(process.env.API_PORT || '3000')
   }
 };
+
+// Log default values being used
+if (!process.env.MQTT_HOST) {
+  logger.info('Using default MQTT_HOST: localhost');
+}
+if (!process.env.MQTT_PORT) {
+  logger.info('Using default MQTT_PORT: 1883');
+}
+if (!process.env.ZONE_RELOAD_INTERVAL) {
+  logger.info('Using default ZONE_RELOAD_INTERVAL: 300 seconds');
+}
+if (!process.env.TOKEN_REFRESH_INTERVAL) {
+  logger.info('Using default TOKEN_REFRESH_INTERVAL: 21600 seconds');
+}
+if (!process.env.REFERENTIALS_RELOAD_INTERVAL) {
+  logger.info('Using default REFERENTIALS_RELOAD_INTERVAL: 86400 seconds');
+}
+if (!process.env.LIVE_DATA_INTERVAL) {
+  logger.info('Using default LIVE_DATA_INTERVAL: 300 seconds');
+}
+if (!process.env.COMMAND_RETRY_TIMEOUT) {
+  logger.info('Using default COMMAND_RETRY_TIMEOUT: 30 seconds');
+}
+if (!process.env.COMMAND_MAX_RETRIES) {
+  logger.info('Using default COMMAND_MAX_RETRIES: 3');
+}
+if (!process.env.LOG_LEVEL) {
+  logger.info('Using default LOG_LEVEL: info');
+}
+if (!process.env.USE_GROUP_IN_NAMES) {
+  logger.info('Using default USE_GROUP_IN_NAMES: false');
+}
+
+// Validate configuration before initializing components
+const validationResult = ConfigValidator.validateConfig(config);
+if (!validationResult.isValid) {
+  logger.error('═══════════════════════════════════════════════════════════════');
+  logger.error('❌ Configuration validation failed');
+  logger.error('═══════════════════════════════════════════════════════════════');
+  validationResult.errors.forEach(err => {
+    logger.error(`  [${err.field}] ${err.message}`);
+  });
+  logger.error('═══════════════════════════════════════════════════════════════');
+  process.exit(1);
+}
+
+if (validationResult.warnings.length > 0) {
+  logger.warn('═══════════════════════════════════════════════════════════════');
+  logger.warn('⚠️  Configuration warnings');
+  logger.warn('═══════════════════════════════════════════════════════════════');
+  validationResult.warnings.forEach(warn => {
+    logger.warn(`  [${warn.field}] ${warn.message}`);
+  });
+  logger.warn('═══════════════════════════════════════════════════════════════');
+}
 
 // Initialize components
 const auth = new RehauAuthPersistent(config.rehau.email, config.rehau.password);
 const mqttBridge = new RehauMQTTBridge(auth, config.mqtt);
 const rehauApi = auth; // RehauAuth has the API methods
 const climateController = new ClimateController(mqttBridge, rehauApi);
-
-// Simple health check server for Docker healthcheck
-const healthServer = http.createServer((req, res) => {
-  if (req.url === '/health' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'ok',
-      authenticated: auth.isAuthenticated(),
-      mqttConnected: mqttBridge.isConnected()
-    }));
-  } else {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
-  }
-});
 
 // Start application
 async function start() {
@@ -133,11 +167,6 @@ async function start() {
       logger.info(`✅ Initialized climate control for: ${fullInstallData.name}`);
     }
     
-    // Start health check server
-    healthServer.listen(config.api.port, () => {
-      logger.info(`🏥 Health check server listening on port ${config.api.port}`);
-    });
-    
     logger.info('🚀 REHAU NEA SMART 2.0 MQTT Bridge started successfully');
     
     // Request LIVE data for all installations (initial)
@@ -199,21 +228,84 @@ function stopPolling(): void {
   }
 }
 
+// Flag to prevent multiple cleanup calls
+let isShuttingDown = false;
+
+/**
+ * Centralized shutdown function with timeout protection
+ */
+async function shutdown(exitCode: number): Promise<void> {
+  // Prevent multiple shutdown calls
+  if (isShuttingDown) {
+    logger.warn('Shutdown already in progress, ignoring duplicate call');
+    return;
+  }
+  
+  isShuttingDown = true;
+  logger.info('🛑 Starting graceful shutdown...');
+  
+  // Set timeout for shutdown (30 seconds max)
+  const shutdownTimeout = setTimeout(() => {
+    logger.error('⚠️  Shutdown timeout exceeded (30s), forcing exit');
+    process.exit(exitCode);
+  }, 30000);
+  
+  try {
+    // Step 1: Stop polling
+    logger.info('Step 1: Stopping polling...');
+    stopPolling();
+    logger.info('✅ Polling stopped');
+    
+    // Step 2: Cleanup ClimateController
+    logger.info('Step 2: Cleaning up ClimateController...');
+    climateController.cleanup();
+    logger.info('✅ ClimateController cleaned up');
+    
+    // Step 3: Cleanup MQTT Bridge
+    logger.info('Step 3: Cleaning up MQTT Bridge...');
+    await mqttBridge.cleanup();
+    logger.info('✅ MQTT Bridge cleaned up');
+    
+    // Step 4: Cleanup Auth
+    logger.info('Step 4: Cleaning up Auth...');
+    auth.cleanup();
+    logger.info('✅ Auth cleaned up');
+    
+    // Clear shutdown timeout
+    clearTimeout(shutdownTimeout);
+    
+    logger.info('✅ Graceful shutdown completed');
+    process.exit(exitCode);
+  } catch (error) {
+    logger.error('❌ Error during shutdown:', (error as Error).message);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
+}
+
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
-  logger.info('🛑 Received SIGTERM, shutting down gracefully...');
-  stopPolling();
-  auth.stopTokenRefresh();
-  await mqttBridge.disconnect();
-  process.exit(0);
+  logger.info('🛑 Received SIGTERM');
+  await shutdown(0);
 });
 
 process.on('SIGINT', async () => {
-  logger.info('🛑 Received SIGINT, shutting down gracefully...');
-  stopPolling();
-  auth.stopTokenRefresh();
-  await mqttBridge.disconnect();
-  process.exit(0);
+  logger.info('🛑 Received SIGINT');
+  await shutdown(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error: Error) => {
+  logger.error('❌ Uncaught Exception:', error.message);
+  logger.error('Stack:', error.stack);
+  await shutdown(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason: unknown, promise: Promise<unknown>) => {
+  logger.error('❌ Unhandled Rejection at:', promise);
+  logger.error('Reason:', reason);
+  await shutdown(1);
 });
 
 // Start the application

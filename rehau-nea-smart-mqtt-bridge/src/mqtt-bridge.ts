@@ -21,7 +21,8 @@ class RehauMQTTBridge {
   private installations: string[] = [];
   private channelToZoneName: Map<string, string> = new Map(); // channelId -> zoneName
   private channelToGroupName: Map<string, string> = new Map(); // channelId -> groupName
-  private isReconnecting: boolean = false;
+  private isReconnectingToRehau: boolean = false;
+  private isReconnectingToHA: boolean = false;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private referentialsHandlerTimeout: NodeJS.Timeout | null = null;
   private healthCheckTimer: NodeJS.Timeout | null = null;
@@ -135,9 +136,7 @@ class RehauMQTTBridge {
           });
         }
         
-        if (!isReconnect) {
-          resolve();
-        }
+        resolve();
       };
       
       this.rehauClient.on('connect', handleRehauConnect);
@@ -156,10 +155,7 @@ class RehauMQTTBridge {
         logger.warn('⚠️  REHAU MQTT connection closed');
         logger.info(`📊 Subscriptions to restore: ${this.rehauSubscriptions.size}`);
         
-        // Handle manual reconnection with token refresh
-        if (!this.isReconnecting) {
-          this.handleRehauReconnection();
-        }
+        this.handleRehauReconnection();
       });
 
       this.rehauClient.on('reconnect', () => {
@@ -260,13 +256,13 @@ class RehauMQTTBridge {
       return;
     }
     
-    if (this.isReconnecting) {
+    if (this.isReconnectingToRehau) {
       logger.debug('REHAU reconnection already in progress, skipping');
       return;
     }
 
     this.lastReconnectAttempt = now;
-    this.isReconnecting = true;
+    this.isReconnectingToRehau = true;
     logger.info('🔄 Preparing to reconnect to REHAU MQTT...');
     
     // Clear any existing reconnect timeout
@@ -315,12 +311,12 @@ class RehauMQTTBridge {
         }
         
         logger.info('✅ REHAU MQTT reconnection completed successfully');
-        this.isReconnecting = false;
+        this.isReconnectingToRehau = false;
         
       } catch (error) {
         logger.error('❌ Failed to reconnect to REHAU MQTT:', (error as Error).message);
         logger.error('Will retry in 30 seconds...');
-        this.isReconnecting = false;
+        this.isReconnectingToRehau = false;
         
         // Retry after 30 seconds
         this.reconnectTimeout = setTimeout(() => {
@@ -343,13 +339,13 @@ class RehauMQTTBridge {
       return;
     }
     
-    if (this.isReconnecting) {
+    if (this.isReconnectingToHA) {
       logger.debug('HA reconnection already in progress, skipping');
       return;
     }
 
     this.lastReconnectAttempt = now;
-    this.isReconnecting = true;
+    this.isReconnectingToHA = true;
     logger.info('🔄 Attempting to reconnect to Home Assistant MQTT...');
     
     try {
@@ -363,11 +359,11 @@ class RehauMQTTBridge {
       // Reconnect to Home Assistant MQTT
       await this.connectToHomeAssistant();
       logger.info('✅ Reconnected to Home Assistant MQTT broker');
-      this.isReconnecting = false;
+      this.isReconnectingToHA = false;
       
     } catch (error) {
       logger.error('❌ Failed to reconnect to Home Assistant MQTT:', (error as Error).message);
-      this.isReconnecting = false;
+      this.isReconnectingToHA = false;
       
       // Schedule retry with exponential backoff
       const retryDelay = Math.min(30000, 5000 * Math.pow(2, 2)); // 20s max
@@ -819,7 +815,8 @@ class RehauMQTTBridge {
     }
     
     this.connected = false;
-    this.isReconnecting = false;
+    this.isReconnectingToHA = false;
+    this.isReconnectingToRehau = false;
   }
 
   /**
@@ -888,7 +885,8 @@ class RehauMQTTBridge {
     
     // Reset flags
     this.connected = false;
-    this.isReconnecting = false;
+    this.isReconnectingToHA = false;
+    this.isReconnectingToRehau = false;
     
     this.isCleanedUp = true;
     logger.info('RehauMQTTBridge cleanup completed');

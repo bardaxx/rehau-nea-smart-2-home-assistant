@@ -8,13 +8,18 @@ behind a sluggish cloud app, e-mail 2FA, and a support forum where issues go to 
 
 One ESP32. No cloud. No add-on. No account. No telemetry leaving your house.
 
-**➡️ [Download the latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)** — currently [`bridge-fw-v0.13.0`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.13.0).
+**➡️ [Download the latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)** — currently [`bridge-fw-v0.14.2`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.2).
 
 > ⚠️ **Under active testing.** The plain Olimex ESP32-POE has limited RAM, and running the
 > full scrape + MQTT + SPA + API stack pushes it close to the edge — long-run heap
 > stability is still being validated. If the headroom proves too tight, the project may
 > move to an **Olimex ESP32-POE with PSRAM (WROVER)** for the production board. Treat this
 > release as a capable beta, not a final hardware verdict.
+
+> **Two board variants are supported.** The standard Olimex ESP32-POE ships with a WROOM
+> module; some boards (ESP32-POE-WROVER-EA) use a WROVER module with PSRAM. The WROVER
+> module occupies GPIO16/17 for PSRAM, so the RMII Ethernet clock moves from GPIO17 to
+> GPIO0. **Download the firmware that matches your board** — they are not interchangeable.
 
 > **Why this exists.** The official REHAU software is slow, cloud-tethered, and forgets
 > you exist the moment your internet hiccups. The app is clumsy, the integrations are
@@ -209,7 +214,7 @@ Full machine-readable contract: **`GET /openapi.json`** on any running board.
 
 | | |
 |---|---|
-| **Board** | Olimex ESP32-POE (ESP32 dual-core, 4 MB flash, PoE + Wi-Fi) |
+| **Board** | Olimex ESP32-POE — WROOM (standard) or WROVER (PSRAM) variant |
 | **Partition layout** | Dual-OTA, 1.5 MB app slots, 960 KB SPA SPIFFS — indefinite OTA |
 | **Footprint** | ~1.4 MB app image; free heap is tight on the base ESP32 — long-run stability under validation, PSRAM (WROVER) board on the table |
 | **Front doors** | REST API · MQTT · resident SPA · admin GUI (all concurrent) |
@@ -224,21 +229,45 @@ Full machine-readable contract: **`GET /openapi.json`** on any running board.
 
 ## Install
 
-Requires an **Olimex ESP32-POE** (the only supported board). Grab the
+Requires an **Olimex ESP32-POE** board. Grab the
 [latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)
-([`bridge-fw-v0.13.0`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.13.0)).
+([`bridge-fw-v0.14.2`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.2)).
+
+### Which firmware do I need?
+
+| Your board | Module | Firmware files |
+|---|---|---|
+| Olimex ESP32-POE (standard) | ESP32-WROOM | `betterehau-bridge-v…-full.bin` / `-ota.bin` |
+| Olimex ESP32-POE-WROVER-EA | ESP32-WROVER (PSRAM) | `betterehau-bridge-v…-wrover-full.bin` / `-wrover-ota.bin` |
+
+The SPIFFS image (`…-spiffs.bin`) is shared between both variants.
+
+> **Not sure?** The standard Olimex ESP32-POE ships with a WROOM module — if you bought
+> a plain "ESP32-POE", use the standard firmware. The WROVER variant (with 8 MB PSRAM)
+> is sold separately as "ESP32-POE-WROVER-EA" or similar.
+
+### First install (USB cable, one time)
 
 ```bash
 pip install esptool
 
-# first install (USB cable, one time)
 esptool --chip esp32 -p COM5 -b 460800 erase_flash
-esptool --chip esp32 -p COM5 -b 460800 write_flash 0x0 betterehau-bridge-<version>-full.bin
+esptool --chip esp32 -p COM5 -b 460800 write_flash 0x0 betterehau-bridge-v0.14.2-full.bin
 ```
 
 Then open `http://<board-ip>:81/`, create your `admin` account, point it at your REHAU
-base and your MQTT broker, and you're running. Every future update is a one-click OTA
-of `…-ota.bin` from the admin GUI — no more cable.
+base and your MQTT broker, and you're running.
+
+### OTA update (no cable)
+
+Every future update is done from the admin GUI — no more cable:
+
+1. Open `http://<board-ip>:81/` → **Maintenance** → **Upload Firmware** → upload `…-ota.bin` (or `…-wrover-ota.bin`)
+2. After reboot: **Maintenance** → **Upload SPIFFS** → upload `…-spiffs.bin`
+
+> **Firmware and SPIFFS are separate updates.** The firmware (OTA) updates the application
+> code; the SPIFFS updates the web interface (admin GUI + resident SPA). When upgrading,
+> always upload the firmware first, then the SPIFFS after reboot.
 
 ---
 

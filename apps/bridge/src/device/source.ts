@@ -73,6 +73,10 @@ import {
 export interface DeviceSource {
   readonly kind: "live" | "mock";
   readonly hasInstaller: boolean;
+  /** Open the always-held installer session, if available. No-op on mock /
+   *  when no installer code is configured. Called by the Poller at boot
+   *  before the priority sequence walks installer-gated pages. */
+  openInstallerSession?(): Promise<void>;
   fetchDashboard(): Promise<DashboardSnapshot>;
   fetchRoomList(): Promise<RoomListEntry[]>;
   fetchRoomDetail(zone: number): Promise<RoomDetailSnapshot>;
@@ -161,7 +165,18 @@ export class LiveDeviceSource implements DeviceSource {
   }
 
   async close(): Promise<void> {
+    // Best-effort: drop the always-held installer session so the device
+    // returns to user mode for any other LAN clients on the AP.
+    if (this.installer) {
+      try { await this.installer.close(); } catch { /* logged inside */ }
+    }
     await this.http.close();
+  }
+
+  /** Open the always-held installer session at boot. */
+  async openInstallerSession(): Promise<void> {
+    if (!this.installer) return;
+    await this.installer.open();
   }
 
   fetchDashboard = async (): Promise<DashboardSnapshot> =>
@@ -356,21 +371,7 @@ export class LiveDeviceSource implements DeviceSource {
 
   async fetchUptime(): Promise<UptimeState> {
     const s = this.requireInstaller();
-    return s.run(async () => {
-      const html = await this.http.get("/installer-system-statistics.html");
-      const out = parseUptime(html);
-      // Diagnostic: when the parser returns 0/0/0, dump a sample of the
-      // body to the addon logs so we can capture the actual REHAU page
-      // shape (e.g. a language we haven't covered yet, or a firmware
-      // that changed the layout) and update the parser.
-      if (out.years === 0 && out.days === 0 && out.hours === 0) {
-        console.warn(
-          "[uptime] parser returned 0 0 0 — sample of /installer-system-statistics.html:\n" +
-            html.replace(/<script[\s\S]*?<\/script>/gi, "").slice(0, 1500),
-        );
-      }
-      return out;
-    });
+    return s.run(async () => parseUptime(await this.http.get("/installer-system-statistics.html")));
   }
 
   async fetchTopology(): Promise<Topology> {

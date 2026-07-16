@@ -1,5 +1,157 @@
 # Changelog
 
+## 6.1.2 — 2026-05-24
+
+- **Drop the `[uptime] parser returned 0 0 0` diagnostic dump.** It
+  was a debug helper added back when the parser was Italian-locked
+  and silently returning all-zeros (fixed in v6.0.x). With the
+  locale-agnostic parser in place, REHAU genuinely reports
+  `0 Year(s) 0 Day(s) 0 Hour(s)` when the controller has just booted
+  — the warning is a false positive and was spamming the addon log
+  with an HTML snippet that wasn't actionable.
+
+## 6.1.1 — 2026-05-24
+
+Three fixes on top of 6.1.0 surfaced by reading the actual addon
+boot log:
+
+- **Fingerprint and MQTT raced ahead with empty data.** The Poller's
+  `kickoffPromise` was assigned inside `start()`, so any consumer that
+  awaited `kickoffComplete()` BEFORE `start()` ran got
+  `Promise.resolve()` immediately. The fingerprint emitted at 1 s of
+  uptime with `roomCount: 0, rooms: [], recentOps: []`, and MQTT
+  would have connected pre-boot too. `kickoffPromise` is now
+  pre-allocated in the constructor with a manual resolver and
+  fulfilled at the end of the kickoff — always a real awaitable.
+- **`/room-page.html` failing at boot left the store with zero rooms.**
+  The per-room detail / set-up loops iterate `store.listRooms()` and
+  silently skipped; with no rooms registered until the next 120 s
+  runtime tick, the SPA + MQTT saw nothing. The boot priority
+  sequence now retries `pollRoomList` once after a 2 s pause if the
+  store is still empty.
+- **Per-fetch INFO log was burying the headline.** Every fetch
+  produced both a verbose `device GET /path → 200 in Xms` INFO line
+  AND an `op.fetch` INFO line with the summary as a sub-field.
+  Two lines per fetch, hard to skim. The device-client per-request
+  success log is now demoted to debug (still INFO on failure), and
+  `op.fetch` uses the summary directly as pino's message
+  (`dashboard ok 434 ms` instead of `op.fetch` + buried fields).
+  `boot.start` / `boot.end` / `safety.*` also pass descriptive
+  summaries so the addon log narrates the priority sequence in
+  plain English.
+
+## 6.1.0 — 2026-05-24
+
+Full implementation of `POLLING-PLAN.md` — the bridge's polling
+strategy is reorganised around the source-of-truth model. Behavioural
+contract is now: boot kickoff fetches everything once in priority
+order, MQTT and runtime polls don't start until boot completes, a
+30-minute safety re-sync re-walks the same priority list, runtime
+polls hold off during safety, every operation produces a parseable
+INFO log line + a 50-entry rolling buffer that the SPA can copy as
+markdown for bug reports.
+
+### Bridge
+
+- **Poller rewritten end-to-end** ([apps/bridge/src/core/poller.ts](apps/bridge/src/core/poller.ts)).
+  - Boot kickoff in fixed priority order: `/` → `/room-page.html` →
+    per-room `/room-operating.html` → IO + `/user-config-installer.html`
+    → messages + calibration + per-room `/room-set-up.html` → 10 daily
+    + 5 weekly programs + 7 installer-tab reads. 36 fetches on a
+    4-room install, MQTT connects when this resolves.
+  - Per-room scheduled cycle replaces the legacy round-robin:
+    `clamp(SLOT × N, MIN, MAX)` seconds per cycle, all rooms back-to-back.
+    Defaults `5/10/30` → per-room freshness 10–30 s vs ~4 min before.
+  - Safety re-sync timer (default 1800 s) re-walks the same priority
+    sequence. Runtime polls hold off via a `safetyBusy` flag.
+  - Every runtime tick (and boot/safety step) goes through `tick()`
+    which `safe()`-wraps the call AND emits an `op.fetch` entry —
+    no more unhandled rejections from undici timeouts crashing the
+    addon.
+- **InstallerSession kept open continuously** ([apps/bridge/src/device/installer.ts](apps/bridge/src/device/installer.ts)).
+  `open()` once at boot, `close()` at graceful shutdown, no per-call
+  login/logout. Saves the 3-round-trip dance on every installer-gated
+  read. Closes the global trade-off: other LAN clients see installer
+  pages while the bridge is up.
+- **MQTT connect deferred** until `poller.kickoffComplete()` resolves
+  ([apps/bridge/src/main.ts](apps/bridge/src/main.ts)). HA shows the
+  device as unavailable for the full boot duration; in exchange it
+  never sees a half-baked installation with partial data.
+- **Operations log** ([apps/bridge/src/observability/ops-log.ts](apps/bridge/src/observability/ops-log.ts)) — 50-entry
+  ring buffer (`OP_LOG_SIZE`) capturing `boot.start`/`end`,
+  `safety.start`/`end`, `fetch`, `mqtt.connect`/`discovery.publish`,
+  `installer.session.open`/`close`. Each entry also emits a structured
+  INFO log line via pino.
+- **Diagnostic snapshot enriched** ([apps/bridge/src/core/fingerprint.ts](apps/bridge/src/core/fingerprint.ts)).
+  `recentOps` + `recentOpsMarkdown` fields surfaced through
+  `GET /api/v1/diagnostics/fingerprint` and the boot
+  `INSTALLATION_FINGERPRINT` log.
+- **Installer-tab routes are cache-first** ([apps/bridge/src/http/routes/installer.ts](apps/bridge/src/http/routes/installer.ts)).
+  Calibration / IO / uptime / topology / heat-curve / settings groups
+  return from the store cache if warm; fall back to a live REHAU read
+  on cache miss. Boot warms everything so the SPA's first open of
+  the Installer tabs is instant.
+- **Process-level safety guards** in main.ts — `unhandledRejection`
+  and `uncaughtException` log + swallow instead of crashing the
+  addon. Belt-and-braces backup for the per-tick `safe()`-wrap.
+
+### SPA
+
+- **`SPA_INSTALLER_TAB` UI-flag** (default `true`). When `false` the
+  bottom TabBar hides the Installer entry and hash-routing to
+  `/installer` bounces home. Bridge polling, REST API, MQTT
+  publishing are all unchanged — pure UI hide. Exposed through the
+  new `GET /api/v1/spa-config` endpoint
+  ([apps/bridge/src/http/routes/spa-config.ts](apps/bridge/src/http/routes/spa-config.ts)),
+  read once on SPA mount.
+- **SPA stops passing `?fresh=true`** on program reads
+  ([apps/web/src/features/programs/Programs.tsx](apps/web/src/features/programs/Programs.tsx)).
+  Reads come from the bridge cache (warmed at boot), writes invalidate
+  via TanStack-Query `onSuccess`. SPA-driven REHAU round-trips on
+  read are eliminated.
+- **Diagnostic snapshot card** now shows a "Recent operations" count
+  ([apps/web/src/features/system/System.tsx](apps/web/src/features/system/System.tsx#L729))
+  and the **Copy as Markdown** clipboard payload includes the
+  `### Recent operations` markdown block under the fenced JSON.
+
+### Config
+
+| New | Default |
+| --- | --- |
+| `POLL_ROOM_DETAIL_SLOT_S` | 5 |
+| `POLL_ROOM_DETAIL_MIN_S` | 10 |
+| `POLL_ROOM_DETAIL_MAX_S` | 30 |
+| `POLL_SYSTEM_INFO_S` | 600 |
+| `SAFETY_RESYNC_S` | 1800 *(0 disables auto-timer)* |
+| `OP_LOG_SIZE` | 50 |
+| `SPA_INSTALLER_TAB` | true |
+
+| Removed |
+| --- |
+| `POLL_ROOM_DETAIL_S` *(superseded by SLOT/MIN/MAX)* |
+| `POLL_CALIBRATION_S` *(calibration becomes write-only + safety)* |
+
+| Default updated |
+| --- |
+| `POLL_DASHBOARD_S` 30 → **120** |
+| `POLL_ROOMS_S` 15 → **120** |
+
+### Verification
+
+End-to-end Playwright run against a real REHAU device:
+
+- boot kickoff completes (29/36 ok on a flaky-REHAU day — bridge
+  survived seven undici timeouts that would have crashed older
+  versions);
+- MQTT connects after boot, publishes discovery with 79 entities;
+- per-room cycle fires every ~20 s for 4 rooms;
+- SPA diagnostic snapshot reports 50 ops, "Copy as Markdown"
+  clipboard contains the fenced JSON + the `### Recent operations`
+  block;
+- `SPA_INSTALLER_TAB=false` hides the bottom-tab Installer entry
+  and bounces `#/installer` to home, while `/api/v1/installer/io`
+  still returns 200 for the same session.
+
 ## 6.0.27 — 2026-05-23
 
 ### Changed — fingerprint is now actually useful for debugging

@@ -8,7 +8,7 @@ behind a sluggish cloud app, e-mail 2FA, and a support forum where issues go to 
 
 One ESP32. No cloud. No add-on. No account. No telemetry leaving your house.
 
-**➡️ [Download the latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)** — currently [`bridge-fw-v0.14.2`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.2).
+**➡️ [Download the latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)** — currently [`bridge-fw-v0.14.3`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.3).
 
 > ⚠️ **Under active testing.** The plain Olimex ESP32-POE has limited RAM, and running the
 > full scrape + MQTT + SPA + API stack pushes it close to the edge — long-run heap
@@ -231,7 +231,7 @@ Full machine-readable contract: **`GET /openapi.json`** on any running board.
 
 Requires an **Olimex ESP32-POE** board. Grab the
 [latest release](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/latest)
-([`bridge-fw-v0.14.2`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.2)).
+([`bridge-fw-v0.14.3`](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/releases/tag/bridge-fw-v0.14.3)).
 
 ### Which firmware do I need?
 
